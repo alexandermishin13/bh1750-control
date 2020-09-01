@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <sqlite3.h>
 
 struct pidfh *pfh;
 

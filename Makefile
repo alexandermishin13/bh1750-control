@@ -9,7 +9,7 @@ BINDIR=		${PREFIX}/sbin
 MAN=		${PROG}.8
 MANDIR=		${PREFIX}/man/man
 
-LDADD=		-lutil
+LDADD=		-lutil -lsqlite3
 
 uninstall:
 	rm ${BINDIR}/${PROG}
