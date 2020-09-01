@@ -26,8 +26,92 @@
  * SUCH DAMAGE.
  */
 
+#include <libutil.h>
+#include <err.h>
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+struct pidfh *pfh;
+
+bool foregroundRun = false;
+
+/* Print usage after mistaken params */
+static void
+usage(char* program)
+{
+  printf("Usage:\n %s [-f]\n", program);
+}
+
+/* Get and decode params */
+static void
+get_param(int argc, char **argv)
+{
+	int opt;
+
+	while((opt = getopt(argc, argv, "hf")) != -1) {
+		switch(opt) {
+		    case 'f': // stay on foreground
+			foregroundRun = true;
+			break;
+
+		    case 'h': // help request
+		    case '?': // unknown option...
+		    default:
+			usage(argv[0]);
+        exit (0);
+		}
+	}
+}
+
+/* Demonize wrapper */
+static void
+demonize(void)
+{
+	pid_t otherpid;
+
+	/* Try to create a pidfile */
+	pfh = pidfile_open(NULL, 0600, &otherpid);
+	if (pfh == NULL) {
+		if (errno == EEXIST)
+			errx (EXIT_FAILURE, "Daemon already running, pid: %jd.", (intmax_t)otherpid);
+
+		/* If we cannot create pidfile from other reasons, only warn. */
+		warn ("Cannot open or create pidfile");
+		/*
+		* Even though pfh is NULL we can continue, as the other pidfile_*
+		* function can handle such situation by doing nothing except setting
+		* errno to EDOOFUS.
+		*/
+	}
+
+	/* Try to demonize the process */
+	if (daemon(0, 0) == -1) {
+		pidfile_remove(pfh);
+		errx (EXIT_FAILURE, "Cannot daemonize");
+	}
+
+	pidfile_write(pfh);
+}
+
 int
 main(int argc, char **argv)
 {
-	exit (0);
+	/* Analize params and set
+	 * configureOnly, backgroundRun
+	 */
+	get_param(argc, argv);
+
+	/* If no foreground flag run as a daemon */
+	if (!foregroundRun)
+		demonize();
+
+	/* Main loop */
+	while(true) {
+		sleep(30);
+	}
+
+	exit (EXIT_SUCCESS);
 }

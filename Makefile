@@ -1,13 +1,15 @@
 # $FreeBSD$
 
-PREFIX?= /usr/local
-MK_DEBUG_FILES= no
+PREFIX?=	/usr/local
+MK_DEBUG_FILES=	no
 
-PROG= bh1750d
-BINDIR= ${PREFIX}/sbin
+PROG=		bh1750d
+BINDIR=		${PREFIX}/sbin
 
-MAN= ${PROG}.8
-MANDIR= ${PREFIX}/man/man
+MAN=		${PROG}.8
+MANDIR=		${PREFIX}/man/man
+
+LDADD=		-lutil
 
 uninstall:
 	rm ${BINDIR}/${PROG}
