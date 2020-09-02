@@ -29,6 +29,7 @@
 #include <libutil.h>
 #include <err.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -36,14 +37,34 @@
 #include <sqlite3.h>
 
 struct pidfh *pfh;
+sqlite3 *db;
+sqlite3_stmt *res;
 
 bool foregroundRun = false;
+char *dbName = "/var/db/bh1750d/action.sqlite";
 
 /* Print usage after mistaken params */
 static void
 usage(char* program)
 {
   printf("Usage:\n %s [-f]\n", program);
+}
+
+/* Signals handler. Prepare the programm for end */
+static void
+termination_handler(int signum)
+{
+	/* Destroy timer */
+//	timer_delete(timerID);
+
+	/* Close the database */
+	sqlite3_finalize(res);
+	sqlite3_close(db);
+
+	/* Remove pidfile and exit */
+	pidfile_remove(pfh);
+
+	exit(EXIT_SUCCESS);
 }
 
 /* Get and decode params */
@@ -100,6 +121,7 @@ demonize(void)
 int
 main(int argc, char **argv)
 {
+
 	/* Analize params and set
 	 * configureOnly, backgroundRun
 	 */
@@ -109,10 +131,56 @@ main(int argc, char **argv)
 	if (!foregroundRun)
 		demonize();
 
-	/* Main loop */
-	while(true) {
-		sleep(30);
+	/* Intercept signals to our function */
+	if (signal (SIGINT, termination_handler) == SIG_IGN)
+		signal (SIGINT, SIG_IGN);
+	if (signal (SIGTERM, termination_handler) == SIG_IGN)
+		signal (SIGTERM, SIG_IGN);
+
+	int rc = sqlite3_open(dbName, &db);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+		sqlite3_close(db);
+		exit (EXIT_FAILURE);
 	}
 
-	exit (EXIT_SUCCESS);
+	char *sql = 
+	    "SELECT a.* FROM illuminance a\n"
+	    "INNER JOIN (\n"
+		"SELECT MAX(level) AS max_level, scope\n"
+		"FROM illuminance WHERE level <= ? GROUP BY scope\n"
+	    ") b\n"
+	    "ON a.level = b.max_level AND a.scope = b.scope";
+
+	do { 
+		rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+	} while (rc == SQLITE_BUSY);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to fetch data: %s\n", sqlite3_errmsg(db));
+		sqlite3_close(db);
+		exit (EXIT_FAILURE);
+	}
+
+	/* Main loop */
+	while(true) {
+		rc = sqlite3_bind_int(res, 1, 10);
+
+		while (rc != SQLITE_DONE) {
+			do {
+				rc = sqlite3_step(res);
+			} while (rc == SQLITE_BUSY);
+
+			printf("%d\t%s\t%s\n",
+			    sqlite3_column_int(res, 0),
+			    sqlite3_column_text(res, 1),
+			    sqlite3_column_text(res, 2)
+			);
+		}
+
+		rc = sqlite3_reset(res);
+
+		sleep(5);
+	}
 }
