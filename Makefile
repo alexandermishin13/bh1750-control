@@ -10,7 +10,7 @@ MAN=		${PROG}.8
 MANDIR=		${PREFIX}/man/man
 
 CFLAGS+=	-Wall -I/usr/local/include
-LDADD=		-L/usr/local/lib -lutil -lsqlite3
+LDADD=		-L/usr/local/lib -lc -lutil -lsqlite3
 
 uninstall:
 	rm ${BINDIR}/${PROG}

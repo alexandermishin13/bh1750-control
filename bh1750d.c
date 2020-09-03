@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  */
 
-#include <libutil.h>
+#include <sys/types.h>
 #include <err.h>
 #include <errno.h>
 #include <signal.h>
@@ -34,29 +34,46 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <libutil.h>
 #include <sqlite3.h>
-
+#include <sys/sysctl.h>
+     
 struct pidfh *pfh;
 sqlite3 *db;
 sqlite3_stmt *res;
+int mib[4];
+size_t mibLen = 4;
+char mibSensor[32];
+unsigned int pos = 0;
 
-bool foregroundRun = false;
+bool backgroundRun = false;
 char *dbName = "/var/db/bh1750d/action.sqlite";
 
 /* Print usage after mistaken params */
 static void
 usage(char* program)
 {
-  printf("Usage:\n %s [-f]\n", program);
+  printf("Usage:\n %s [-b] [-i <pos>]\n", program);
+}
+
+/* Position of the device instance in the sysctl mib */
+static unsigned int
+get_position(char *flag_i)
+{
+	unsigned int number;
+	const char *errstr;
+
+	number = strtonum(flag_i, 0, 9, &errstr);
+	if (errstr != NULL)
+		errx(EXIT_FAILURE, "The device number is %s: %s (must be from %d to %d)", errstr, flag_i, 0, 9);
+
+	return number;
 }
 
 /* Signals handler. Prepare the programm for end */
 static void
 termination_handler(int signum)
 {
-	/* Destroy timer */
-//	timer_delete(timerID);
-
 	/* Close the database */
 	sqlite3_finalize(res);
 	sqlite3_close(db);
@@ -73,10 +90,14 @@ get_param(int argc, char **argv)
 {
 	int opt;
 
-	while((opt = getopt(argc, argv, "hf")) != -1) {
+	while((opt = getopt(argc, argv, "hbi:")) != -1) {
 		switch(opt) {
-		    case 'f': // stay on foreground
-			foregroundRun = true;
+		    case 'b': // run in background as a daemon
+			backgroundRun = true;
+			break;
+
+		    case 'i':
+			pos = get_position(optarg);
 			break;
 
 		    case 'h': // help request
@@ -121,14 +142,21 @@ demonize(void)
 int
 main(int argc, char **argv)
 {
+	unsigned long illuminance;
+	size_t len = sizeof(illuminance);
 
-	/* Analize params and set
-	 * configureOnly, backgroundRun
-	 */
+	/* Analize params and set backgroundRun and pos */
 	get_param(argc, argv);
 
-	/* If no foreground flag run as a daemon */
-	if (!foregroundRun)
+	sprintf(mibSensor, "dev.bh1750.%u.illuminance", pos);
+	sysctlnametomib(mibSensor, mib, &mibLen);
+
+	/* Check if device is connected */
+	if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
+		errx(EXIT_FAILURE, "Device %u is not connected", pos);
+
+	/* If background flag run as a daemon */
+	if (backgroundRun)
 		demonize();
 
 	/* Intercept signals to our function */
@@ -145,7 +173,7 @@ main(int argc, char **argv)
 		exit (EXIT_FAILURE);
 	}
 
-	char *sql = 
+	char *sql =
 	    "SELECT a.* FROM illuminance a\n"
 	    "INNER JOIN (\n"
 		"SELECT MAX(level) AS max_level, scope\n"
@@ -165,13 +193,12 @@ main(int argc, char **argv)
 
 	/* Main loop */
 	while(true) {
-		rc = sqlite3_bind_int(res, 1, 10);
+		if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
+			perror("sysctl");
 
-		while (rc != SQLITE_DONE) {
-			do {
-				rc = sqlite3_step(res);
-			} while (rc == SQLITE_BUSY);
+		rc = sqlite3_bind_int(res, 1, illuminance);
 
+		while ((rc = sqlite3_step(res)) == SQLITE_ROW) {
 			printf("%d\t%s\t%s\n",
 			    sqlite3_column_int(res, 0),
 			    sqlite3_column_text(res, 1),
