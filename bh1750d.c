@@ -40,7 +40,7 @@
      
 struct pidfh *pfh;
 sqlite3 *db;
-sqlite3_stmt *res;
+sqlite3_stmt *res_select;
 int mib[4];
 size_t mibLen = 4;
 char mibSensor[32];
@@ -74,8 +74,17 @@ get_position(char *flag_i)
 static void
 termination_handler(int signum)
 {
+	int rc;
+	char *drop_temp =
+	    "DROP TABLE journal;";
+
+	/* "just to make it right" */
+	do {
+		rc = sqlite3_exec(db, drop_temp, 0, 0, NULL);
+	} while (rc == SQLITE_BUSY);
+
 	/* Close the database */
-	sqlite3_finalize(res);
+	sqlite3_finalize(res_select);
 	sqlite3_close(db);
 
 	/* Remove pidfile and exit */
@@ -142,8 +151,28 @@ demonize(void)
 int
 main(int argc, char **argv)
 {
+	int rc;
+	sqlite3_stmt *res_update;
 	unsigned long illuminance;
 	size_t len = sizeof(illuminance);
+	char *create_temp =
+	    "PRAGMA temp_store = MEMORY;\n"
+	    "CREATE TEMPORARY TABLE IF NOT EXISTS journal (\n"
+		"scope TEXT NOT NULL,\n"
+		"level INT NOT NULL,\n"
+		"PRIMARY KEY (scope)\n"
+	    ") WITHOUT ROWID;\n";
+	char *update_temp =
+	    "INSERT INTO Book (scope, level) VALUES (?, ?)\n"
+	    "ON CONFLICT (scope)\n"
+	    "DO UPDATE SET level=excluded.level;";
+	char *select_actions =
+	    "SELECT a.* FROM illuminance a\n"
+	    "INNER JOIN (\n"
+		"SELECT MAX(level) AS max_level, scope\n"
+		"FROM illuminance WHERE level <= ? GROUP BY scope\n"
+	    ") b\n"
+	    "ON a.level = b.max_level AND a.scope = b.scope";
 
 	/* Analize params and set backgroundRun and pos */
 	get_param(argc, argv);
@@ -165,7 +194,7 @@ main(int argc, char **argv)
 	if (signal (SIGTERM, termination_handler) == SIG_IGN)
 		signal (SIGTERM, SIG_IGN);
 
-	int rc = sqlite3_open(dbName, &db);
+	rc = sqlite3_open(dbName, &db);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
@@ -173,16 +202,31 @@ main(int argc, char **argv)
 		exit (EXIT_FAILURE);
 	}
 
-	char *sql =
-	    "SELECT a.* FROM illuminance a\n"
-	    "INNER JOIN (\n"
-		"SELECT MAX(level) AS max_level, scope\n"
-		"FROM illuminance WHERE level <= ? GROUP BY scope\n"
-	    ") b\n"
-	    "ON a.level = b.max_level AND a.scope = b.scope";
+	/* Create in memory temporary journal */
+	do {
+		rc = sqlite3_exec(db, create_temp, 0, 0, NULL);
+	} while (rc == SQLITE_BUSY);
 
-	do { 
-		rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+	if (rc != SQLITE_OK ) {
+		fprintf(stderr, "Cannot create temporary table: %s\n", sqlite3_errmsg(db));
+		sqlite3_close(db);
+		exit (EXIT_FAILURE);
+	}
+
+	/* Prepare to select actions for achived values of light levels */
+	do {
+		rc = sqlite3_prepare_v2(db, select_actions, -1, &res_select, NULL);
+	} while (rc == SQLITE_BUSY);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to fetch data: %s\n", sqlite3_errmsg(db));
+		sqlite3_close(db);
+		exit (EXIT_FAILURE);
+	}
+
+	/* Prepare to insert/update journaled values */
+	do {
+		rc = sqlite3_prepare_v2(db, update_temp, -1, &res_update, NULL);
 	} while (rc == SQLITE_BUSY);
 
 	if (rc != SQLITE_OK) {
@@ -196,17 +240,17 @@ main(int argc, char **argv)
 		if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
 			perror("sysctl");
 
-		rc = sqlite3_bind_int(res, 1, illuminance);
+		sqlite3_bind_int(res_select, 1, illuminance);
 
-		while ((rc = sqlite3_step(res)) == SQLITE_ROW) {
+		while (sqlite3_step(res_select) == SQLITE_ROW) {
 			printf("%d\t%s\t%s\n",
-			    sqlite3_column_int(res, 0),
-			    sqlite3_column_text(res, 1),
-			    sqlite3_column_text(res, 2)
+			    sqlite3_column_int(res_select, 0),
+			    sqlite3_column_text(res_select, 1),
+			    sqlite3_column_text(res_select, 2)
 			);
 		}
 
-		rc = sqlite3_reset(res);
+		sqlite3_reset(res_select);
 
 		sleep(5);
 	}
