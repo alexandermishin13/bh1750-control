@@ -32,12 +32,16 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <libutil.h>
 #include <sqlite3.h>
 #include <sys/sysctl.h>
-     
+#include <wordexp.h>
+#include <spawn.h>
+#include <sys/wait.h>
+
 struct pidfh *pfh;
 sqlite3 *db;
 sqlite3_stmt *res_select;
@@ -45,8 +49,10 @@ int mib[4];
 size_t mibLen = 4;
 char mibSensor[32];
 unsigned int pos = 0;
+extern char **environ;
 
 bool backgroundRun = false;
+bool debug = false;
 char *dbName = "/var/db/bh1750d/action.sqlite";
 
 /* Print usage after mistaken params */
@@ -99,10 +105,14 @@ get_param(int argc, char **argv)
 {
 	int opt;
 
-	while((opt = getopt(argc, argv, "hbi:")) != -1) {
+	while((opt = getopt(argc, argv, "hbdi:")) != -1) {
 		switch(opt) {
 		    case 'b': // run in background as a daemon
 			backgroundRun = true;
+			break;
+
+		    case 'd': // debug messages
+			debug = true;
 			break;
 
 		    case 'i':
@@ -148,6 +158,29 @@ demonize(void)
 	pidfile_write(pfh);
 }
 
+static void
+exec_cmd(char *arg)
+{
+	int status;
+	pid_t pid;
+	wordexp_t we;
+
+	wordexp(arg, &we, 0);
+
+	status = posix_spawnp(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
+
+	wordfree(&we);
+
+	if (debug && status == 0) {
+		if (waitpid(pid, &status, 0) != -1)
+			fprintf(stderr, "Child exited with status %i\n", status);
+		else
+			perror("waitpid");
+	}
+	else
+		fprintf(stderr, "posix_spawn: %s\n", strerror(status));
+}
+
 int
 main(int argc, char **argv)
 {
@@ -158,21 +191,26 @@ main(int argc, char **argv)
 	char *create_temp =
 	    "PRAGMA temp_store = MEMORY;\n"
 	    "CREATE TEMPORARY TABLE IF NOT EXISTS journal (\n"
-		"scope TEXT NOT NULL,\n"
+		"scope INT NOT NULL,\n"
 		"level INT NOT NULL,\n"
 		"PRIMARY KEY (scope)\n"
 	    ") WITHOUT ROWID;\n";
+
 	char *update_temp =
-	    "INSERT INTO Book (scope, level) VALUES (?, ?)\n"
+	    "INSERT INTO journal (scope, level) VALUES (?, ?)\n"
 	    "ON CONFLICT (scope)\n"
 	    "DO UPDATE SET level=excluded.level;";
+
 	char *select_actions =
-	    "SELECT a.* FROM illuminance a\n"
+	    "SELECT a1.level, a1.scope, a1.action, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
+	    "FROM illuminance a1\n"
+	    "LEFT JOIN journal b\n"
+	    "ON a1.scope = b.scope\n"
 	    "INNER JOIN (\n"
 		"SELECT MAX(level) AS max_level, scope\n"
 		"FROM illuminance WHERE level <= ? GROUP BY scope\n"
-	    ") b\n"
-	    "ON a.level = b.max_level AND a.scope = b.scope";
+	    ") a2\n"
+	    "ON a1.level = a2.max_level AND a1.scope = a2.scope";
 
 	/* Analize params and set backgroundRun and pos */
 	get_param(argc, argv);
@@ -230,26 +268,43 @@ main(int argc, char **argv)
 	} while (rc == SQLITE_BUSY);
 
 	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Failed to fetch data: %s\n", sqlite3_errmsg(db));
+		fprintf(stderr, "Failed to prepare journal: %s\n", sqlite3_errmsg(db));
 		sqlite3_close(db);
 		exit (EXIT_FAILURE);
 	}
 
 	/* Main loop */
+	int colLevel, colLevelPrev, colScope;
+	char *colAction;
 	while(true) {
 		if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
 			perror("sysctl");
 
+		/* Get actual for the light level actions */
 		sqlite3_bind_int(res_select, 1, illuminance);
-
 		while (sqlite3_step(res_select) == SQLITE_ROW) {
-			printf("%d\t%s\t%s\n",
-			    sqlite3_column_int(res_select, 0),
-			    sqlite3_column_text(res_select, 1),
-			    sqlite3_column_text(res_select, 2)
-			);
-		}
+			colLevel = sqlite3_column_int(res_select, 0);
+			colScope = sqlite3_column_int(res_select, 1);
+			colLevelPrev = sqlite3_column_int(res_select, 3);
+			colAction = (char *)sqlite3_column_text(res_select, 2);
 
+			/* Do actions */
+			if (colLevel != colLevelPrev) {
+				printf("%d\t%d\t%d\t%s\n",
+				    colLevel, colLevelPrev, colScope, colAction
+				);
+				exec_cmd(colAction);
+			}
+
+			/* Save the light levels to the journal */
+			sqlite3_bind_int(res_update, 1, colScope);
+			sqlite3_bind_int(res_update, 2, colLevel);
+			if (sqlite3_step(res_update) != SQLITE_DONE) {
+				fprintf(stderr, "Failed to update journal: %s\n", sqlite3_errmsg(db));
+			}
+			sqlite3_reset(res_update);
+		}
+		/* Reset for next request */
 		sqlite3_reset(res_select);
 
 		sleep(5);
