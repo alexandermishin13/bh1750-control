@@ -93,9 +93,9 @@ class action_db():
         if level != None:
             sql_del = ("""
                 DELETE FROM illuminance
-                WHERE scopeid=(SELECT id FROM scopes WHERE scope=?) AND level=?;
+                WHERE level=? AND scopeid=(SELECT id FROM scopes WHERE scope=?);
                 """)
-            self.conn.execute(sql_del, (args.scope, level,));
+            self.conn.execute(sql_del, (level, args.scope,));
         else:
             sql_del = ("""
                 DELETE FROM scopes WHERE scope=?;

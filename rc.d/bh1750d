@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# $FreeBSD: 2018-08-26 18:15:00Z mishin $
+#
+# PROVIDE: bh1750d
+# REQUIRE: DAEMON
+# KEYWORD: nojail shutdown
+#
+# Add the following lines to /etc/rc.conf to enable bh1750d:
+#
+# bh1750d_enable (bool): Set to "NO"  by default.
+#                            Set to "YES" to enable bh1750d.
+
+. /etc/rc.subr
+
+name=bh1750d
+rcvar=bh1750d_enable
+
+load_rc_config $name
+
+: ${bh1750d_enable:="NO"}
+: ${bh1750d_flags:="-b"}
+
+pidfile=${bh1750d_pidfile-"/var/run/$name.pid"}
+
+command=/usr/local/sbin/$name
+
+run_rc_command "$@"
