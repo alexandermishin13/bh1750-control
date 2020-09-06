@@ -27,14 +27,24 @@ class illuminance():
 class action_db():
     def __init__(self, filename):
         sql_create = ("""
+            CREATE TABLE IF NOT EXISTS scopes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope TEXT NOT NULL UNIQUE
+            );
+            INSERT OR IGNORE INTO scopes VALUES(0,'Default');
             CREATE TABLE IF NOT EXISTS illuminance (
                 level INT NOT NULL,
-                scope TEXT NOT NULL,
+                scopeid INT NOT NULL,
                 action TEXT NOT NULL,
-                PRIMARY KEY (level, scope)
+                PRIMARY KEY (level, scopeid),
+                CONSTRAINT fk_scopes
+                    FOREIGN KEY (scopeid)
+                    REFERENCES scopes(id)
+                    ON UPDATE CASCADE
+                    ON DELETE CASCADE
             ) WITHOUT ROWID;
-
-            CREATE INDEX IF NOT EXISTS index_scope_level ON illuminance(scope, level);
+            CREATE INDEX IF NOT EXISTS index_scope_level ON illuminance(scopeid, level);
+            PRAGMA foreign_keys=ON;
         """)
         try:
             self.conn = sqlite3.connect(filename)
@@ -53,13 +63,17 @@ class action_db():
     """ Adds an action for illuminance level and scope
     """
     def add(self, args):
-        sql_add = ("""
-            INSERT INTO illuminance (level, scope, action)
-            VALUES (?, ?, ?)
+        sql_add_scope = ("""
+            INSERT OR IGNORE INTO scopes(scope) VALUES(?);
+            """)
+        sql_add_level = ("""
+            INSERT INTO illuminance (level, scopeid, action)
+            VALUES (?, (SELECT id FROM scopes WHERE scope = ?), ?);
             """)
 
         try:
-            self.conn.execute(sql_add, (args.level, args.scope, args.execute,))
+            self.conn.execute(sql_add_scope, (args.scope,))
+            self.conn.execute(sql_add_level, (args.level, args.scope, args.execute,))
             self.conn.commit()
         except sqlite3.IntegrityError:
             sys.stderr.write(
@@ -78,12 +92,13 @@ class action_db():
         level = args.level
         if level != None:
             sql_del = ("""
-                DELETE FROM illuminance WHERE scope=? AND level=?
+                DELETE FROM illuminance
+                WHERE scopeid=(SELECT id FROM scopes WHERE scope=?) AND level=?;
                 """)
             self.conn.execute(sql_del, (args.scope, level,));
         else:
             sql_del = ("""
-                DELETE FROM illuminance WHERE scope=?
+                DELETE FROM scopes WHERE scope=?;
                 """)
             self.conn.execute(sql_del, (args.scope,));
         self.conn.commit()
@@ -93,15 +108,15 @@ class action_db():
     """
     def run_actions(self, level):
         sql_get_actions = ("""
-            SELECT a.* FROM illuminance a
+            SELECT a1.level, a1.scopeid, a1.action FROM illuminance a1
             INNER JOIN (
-                SELECT MAX(level) AS max_level, scope
-                FROM illuminance WHERE level <= ? GROUP BY scope
-            ) b
-            ON a.level = b.max_level AND a.scope = b.scope;
+                SELECT MAX(level) AS max_level, scopeid
+                FROM illuminance WHERE level <= ? GROUP BY scopeid
+            ) a2
+            ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;
             """)
         cursor = self.conn.cursor()
-        for level, scope, action in cursor.execute(sql_get_actions, (level,)):
+        for level, scopeid, action in cursor.execute(sql_get_actions, (level,)):
             subprocess.run(action.split())
 
     """ Prints all action definitions from DB
@@ -109,17 +124,20 @@ class action_db():
     def list_all(self):
         scope_prev = ""
         sql_list_all = ("""
-            SELECT * FROM illuminance ORDER BY scope, level
+            SELECT level, scopeid, scope, action FROM illuminance, scopes
+            WHERE illuminance.scopeid = scopes.id
+            ORDER BY scopeid, level
             """)
 
         cursor = self.conn.cursor()
 
-        for level, scope, action in cursor.execute(sql_list_all):
+        for level, scopeid, scope, action in cursor.execute(sql_list_all):
             if scope == scope_prev:
-                scope = " " * len(scope)
+                sys.stdout.write("{:10d} {}\n".format(level, action))
             else:
+                sys.stdout.write("[{}:{}]\n".format(scopeid, scope))
+                sys.stdout.write("{:10d} {}\n".format(level, action))
                 scope_prev = scope
-            sys.stdout.write("%s %5d %s\n" % (scope, level, action,))
 
 
 cmd_help = {
@@ -160,7 +178,6 @@ if __name__ == "__main__":
         action.list_all()
     elif args.command == "run":
         level = light.get_level()
-        print(level)
         action.run_actions(level)
     elif args.command == "delete":
         action.delete(args)

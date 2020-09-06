@@ -17,3 +17,5 @@ For run `bh1750tool` You need to install following Python modules:
 sudo pkg install py37-sqlite3
 sudo pkg install py37-sysctl
 ```
+The SQLite library must also be compiled with neither SQLITE_OMIT_FOREIGN_KEY
+nor SQLITE_OMIT_TRIGGER.

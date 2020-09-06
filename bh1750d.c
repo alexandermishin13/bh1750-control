@@ -171,14 +171,16 @@ exec_cmd(char *arg)
 
 	wordfree(&we);
 
-	if (debug && status == 0) {
-		if (waitpid(pid, &status, 0) != -1)
-			fprintf(stderr, "Child exited with status %i\n", status);
+	if (debug) {
+		if (status == 0) {
+			if (waitpid(pid, &status, 0) != -1)
+				fprintf(stderr, "Child exited with status %i\n", status);
+			else
+				perror("waitpid");
+		}
 		else
-			perror("waitpid");
+			fprintf(stderr, "posix_spawn: %s\n", strerror(status));
 	}
-	else
-		fprintf(stderr, "posix_spawn: %s\n", strerror(status));
 }
 
 int
@@ -191,26 +193,25 @@ main(int argc, char **argv)
 	char *create_temp =
 	    "PRAGMA temp_store = MEMORY;\n"
 	    "CREATE TEMPORARY TABLE IF NOT EXISTS journal (\n"
-		"scope INT NOT NULL,\n"
-		"level INT NOT NULL,\n"
-		"PRIMARY KEY (scope)\n"
+		"scopeid INT PRIMARY KEY NOT NULL,\n"
+		"level INT NOT NULL\n"
 	    ") WITHOUT ROWID;\n";
 
 	char *update_temp =
-	    "INSERT INTO journal (scope, level) VALUES (?, ?)\n"
-	    "ON CONFLICT (scope)\n"
+	    "INSERT INTO journal (scopeid, level) VALUES (?, ?)\n"
+	    "ON CONFLICT (scopeid)\n"
 	    "DO UPDATE SET level=excluded.level;";
 
 	char *select_actions =
-	    "SELECT a1.level, a1.scope, a1.action, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
+	    "SELECT a1.level, a1.scopeid, a1.action, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
 	    "FROM illuminance a1\n"
 	    "LEFT JOIN journal b\n"
-	    "ON a1.scope = b.scope\n"
+	    "ON a1.scopeid = b.scopeid\n"
 	    "INNER JOIN (\n"
-		"SELECT MAX(level) AS max_level, scope\n"
-		"FROM illuminance WHERE level <= ? GROUP BY scope\n"
+		"SELECT MAX(level) AS max_level, scopeid\n"
+		"FROM illuminance WHERE level <= ? GROUP BY scopeid\n"
 	    ") a2\n"
-	    "ON a1.level = a2.max_level AND a1.scope = a2.scope";
+	    "ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid";
 
 	/* Analize params and set backgroundRun and pos */
 	get_param(argc, argv);
@@ -290,10 +291,11 @@ main(int argc, char **argv)
 
 			/* Do actions */
 			if (colLevel != colLevelPrev) {
-				printf("%d\t%d\t%d\t%s\n",
-				    colLevel, colLevelPrev, colScope, colAction
-				);
 				exec_cmd(colAction);
+				if (debug)
+					printf("%d\t%d\t%d\t%s\n",
+					    colLevel, colLevelPrev, colScope, colAction
+					);
 			}
 
 			/* Save the light levels to the journal */
