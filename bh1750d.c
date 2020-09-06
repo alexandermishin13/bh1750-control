@@ -167,7 +167,7 @@ exec_cmd(char *arg)
 
 	wordexp(arg, &we, 0);
 
-	status = posix_spawnp(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
+	status = posix_spawn(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
 
 	wordfree(&we);
 
