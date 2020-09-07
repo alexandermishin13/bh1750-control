@@ -167,7 +167,7 @@ for command in ["add", "delete"]:
                        help="illuminance level for action")
 
 
-db_filename = '/var/db/bh1750d/action.sqlite'
+db_filename = '/var/db/bh1750/actions.sqlite'
 action = action_db(db_filename)
 light = illuminance()
 

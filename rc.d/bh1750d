@@ -10,6 +10,7 @@
 #
 # bh1750d_enable (bool): Set to "NO"  by default.
 #                            Set to "YES" to enable bh1750d.
+# bh1750d_sqlite (string): Path to sqlite db file.
 
 . /etc/rc.subr
 

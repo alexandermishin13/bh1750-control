@@ -53,7 +53,7 @@ extern char **environ;
 
 bool backgroundRun = false;
 bool debug = false;
-char *dbName = "/var/db/bh1750d/action.sqlite";
+char *dbName = "/var/db/bh1750/actions.sqlite";
 
 /* Print usage after mistaken params */
 static void
@@ -105,7 +105,7 @@ get_param(int argc, char **argv)
 {
 	int opt;
 
-	while((opt = getopt(argc, argv, "hbdi:")) != -1) {
+	while((opt = getopt(argc, argv, "hbdi:f:")) != -1) {
 		switch(opt) {
 		    case 'b': // run in background as a daemon
 			backgroundRun = true;
@@ -113,6 +113,11 @@ get_param(int argc, char **argv)
 
 		    case 'd': // debug messages
 			debug = true;
+			break;
+
+		    case 'f': // db filename
+			dbName = optarg;
+			printf("%s\n", dbName);
 			break;
 
 		    case 'i':
