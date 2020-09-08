@@ -2,30 +2,30 @@
 #
 # $FreeBSD: 2018-08-26 18:15:00Z mishin $
 #
-# PROVIDE: bh1750d
+# PROVIDE: bh1750-daemon
 # REQUIRE: DAEMON
 # KEYWORD: nojail shutdown
 #
-# Add the following lines to /etc/rc.conf to enable bh1750d:
+# Add the following lines to /etc/rc.conf to enable bh1750_daemon:
 #
-# bh1750d_enable (bool): Set to "NO"  by default.
-#                            Set to "YES" to enable bh1750d.
+# bh1750_daemon_enable (bool): Set to "NO"  by default.
+#                            Set to "YES" to enable bh1750_daemon.
 
 . /etc/rc.subr
 
-name=bh1750d
-rcvar=bh1750d_enable
+name=bh1750_daemon
+rcvar=bh1750_daemon_enable
 
 load_rc_config $name
 
-: ${bh1750d_enable:="NO"}
-: ${bh1750d_flags:="-b"}
-: ${bh1750d_number:="0"}
-: ${bh1750d_dbfile:="/var/db/bh1750/actions.sqlite"}
+: ${bh1750_daemon_enable:="NO"}
+: ${bh1750_daemon_flags:="-b"}
+: ${bh1750_daemon_number:="0"}
+: ${bh1750_daemon_dbfile:="/var/db/bh1750/actions.sqlite"}
 
-pidfile=${bh1750d_pidfile-"/var/run/$name.pid"}
+pidfile=${bh1750_daemon_pidfile-"/var/run/$name.pid"}
 
 command=/usr/local/sbin/$name
-command_args="-i ${bh1750d_number} -f ${bh1750d_dbfile}"
+command_args="-i ${bh1750_daemon_number} -f ${bh1750_daemon_dbfile}"
 
 run_rc_command "$@"
