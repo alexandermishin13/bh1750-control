@@ -1,3 +1,3 @@
-bh1750d_enable="YES"
-nh1750d_number="0"
-bh1750d_dbfile="/var/db/bh1750/actions.sqlite"
+bh1750_daemon_enable="YES"
+bh1750_daemon_number="0"
+bh1750_daemon_dbfile="/var/db/bh1750/actions.sqlite"
