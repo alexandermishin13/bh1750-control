@@ -3,7 +3,7 @@
 PREFIX?=	/usr/local
 MK_DEBUG_FILES=	no
 
-PROG=		bh1750d
+PROG=		bh1750-daemon
 BINDIR=		${PREFIX}/sbin
 
 FILESGROUPS= RC

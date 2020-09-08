@@ -31,7 +31,7 @@ The tool allows you to perform the following actions with the database:
 * **run** for measure light, compute levels and execute actions.
 You can run it by `cron` at most once a minute.
 
-Or You can use a daemon `bh1750d` for run the actions.
+Or You can use a daemon `bh1750_daemon` for run the actions.
 The daemon reads the `dev.bh1750.%u.illuminance` variable for measured light
 level, searches the database, and runs the commands it finds.
 
