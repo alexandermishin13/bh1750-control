@@ -1,21 +1,42 @@
+# bh1750-control
+
 ## About
 
+The tools require a bh1750 sensor connected to the i2c bus and a kernel
+driver: https://gitlab.com/alexandermishin13/bh1750-kmod.
+
 An idea of this tool is plain:
-* to record a sets of ambient lighting levels as database records with a
-specific action for each level;
-* Each set of levels have its own scope;
-* For each scope an actual action is action for a level which less then
-a current;
-* When the tool is periodically launched, for each scope will be performed
-an action corresponding to the last achieved lighting level. All other levels
-will be ignored.
+* There is one or more rows of defined pairs: (lighting level -> action);
+* Each such row of levels has its own scope;
+* After each measurement of the ambient light level, the maximum achieved
+values are selected, one for each scope, and the specified actions are
+executed.
 
 ## Installation
 
-For run `bh1750tool` You need to install following Python modules:
+For run `bh1750ctl.py` You need to install following Python modules:
 ```
 sudo pkg install py37-sqlite3
 sudo pkg install py37-sysctl
 ```
 The SQLite library must also be compiled with neither SQLITE_OMIT_FOREIGN_KEY
 nor SQLITE_OMIT_TRIGGER.
+
+## Usage
+
+The tool allows you to perform the following actions with the database:
+* **add** an `action` for the `level` in the `scope`;
+* **delete** an `action` for the `level` in the `scope` or the whole `scope`;
+* **list** all defined actions;
+* **run** for measure light, compute levels and execute actions.
+You can run it by `cron` at most once a minute.
+
+Or You can use a daemon `bh1750d` for run the actions.
+The daemon reads the `dev.bh1750.%u.illuminance` variable for measured light
+level, searches the database, and runs the commands it finds.
+
+## Status
+
+Still in development but works fine for me.
+I use it mainly to adjust the brightness of the tm1637 display depending on
+the ambient light: https://gitlab.com/alexandermishin13/tm1637-kmod
