@@ -2,7 +2,7 @@
 #
 # $FreeBSD: 2018-08-26 18:15:00Z mishin $
 #
-# PROVIDE: bh1750-daemon
+# PROVIDE: bh1750_daemon
 # REQUIRE: DAEMON
 # KEYWORD: nojail shutdown
 #
@@ -25,7 +25,8 @@ load_rc_config $name
 
 pidfile=${bh1750_daemon_pidfile-"/var/run/$name.pid"}
 
-command=/usr/local/sbin/$name
+bh1750_daemon_bin="/usr/local/sbin/bh1750-daemon"
+command=${bh1750_daemon_bin}
 command_args="-i ${bh1750_daemon_number} -f ${bh1750_daemon_dbfile}"
 
 run_rc_command "$@"
