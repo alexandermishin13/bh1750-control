@@ -10,7 +10,6 @@
 #
 # bh1750d_enable (bool): Set to "NO"  by default.
 #                            Set to "YES" to enable bh1750d.
-# bh1750d_sqlite (string): Path to sqlite db file.
 
 . /etc/rc.subr
 
@@ -21,9 +20,12 @@ load_rc_config $name
 
 : ${bh1750d_enable:="NO"}
 : ${bh1750d_flags:="-b"}
+: ${bh1750d_number:="0"}
+: ${bh1750d_dbfile:="/var/db/bh1750/actions.sqlite"}
 
 pidfile=${bh1750d_pidfile-"/var/run/$name.pid"}
 
 command=/usr/local/sbin/$name
+command_args="-i ${bh1750d_number} -f ${bh1750d_dbfile}"
 
 run_rc_command "$@"

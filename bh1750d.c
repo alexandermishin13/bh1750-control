@@ -59,7 +59,8 @@ char *dbName = "/var/db/bh1750/actions.sqlite";
 static void
 usage(char* program)
 {
-  printf("Usage:\n %s [-b] [-i <pos>]\n", program);
+  printf("Usage:\n"
+	 " %s [-b] [-i <pos>] [-f <dbfile>]\n", program);
 }
 
 /* Position of the device instance in the sysctl mib */
@@ -117,7 +118,6 @@ get_param(int argc, char **argv)
 
 		    case 'f': // db filename
 			dbName = optarg;
-			printf("%s\n", dbName);
 			break;
 
 		    case 'i':
