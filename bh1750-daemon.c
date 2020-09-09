@@ -197,6 +197,7 @@ main(int argc, char **argv)
 	size_t len = sizeof(illuminance);
 	char *create_temp =
 	    "PRAGMA temp_store = MEMORY;\n"
+	    "PRAGMA journal_mode = OFF;\n"
 	    "CREATE TEMPORARY TABLE IF NOT EXISTS journal (\n"
 		"scopeid INT PRIMARY KEY NOT NULL,\n"
 		"level INT NOT NULL\n"
