@@ -296,20 +296,16 @@ main(int argc, char **argv)
 			colAction = (char *)sqlite3_column_text(res_select, 2);
 
 			/* Do actions */
-			if (colLevel != colLevelPrev) {
+			if (colLevel != colLevelPrev)
 				exec_cmd(colAction);
-				if (debug)
-					printf("%d\t%d\t%d\t%s\n",
-					    colLevel, colLevelPrev, colScope, colAction
-					);
-			}
 
 			/* Save the light levels to the temporary table */
 			sqlite3_bind_int(res_update, 1, colScope);
 			sqlite3_bind_int(res_update, 2, colLevel);
-			if (sqlite3_step(res_update) != SQLITE_DONE) {
+
+			if (sqlite3_step(res_update) != SQLITE_DONE)
 				fprintf(stderr, "Failed to update temporary table: %s\n", sqlite3_errmsg(db));
-			}
+
 			sqlite3_reset(res_update);
 		}
 		/* Reset for next request */
