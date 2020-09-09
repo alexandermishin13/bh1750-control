@@ -27,6 +27,7 @@
  */
 
 #include <sys/types.h>
+#include <limits.h>
 #include <err.h>
 #include <errno.h>
 #include <signal.h>
@@ -193,7 +194,7 @@ main(int argc, char **argv)
 {
 	int rc;
 	sqlite3_stmt *res_update;
-	unsigned long illuminance;
+	unsigned long illuminance, prevIlluminance = 0;
 	size_t len = sizeof(illuminance);
 	char *create_temp =
 	    "PRAGMA temp_store = MEMORY;\n"
@@ -275,41 +276,59 @@ main(int argc, char **argv)
 	} while (rc == SQLITE_BUSY);
 
 	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Failed to prepare temporary table: %s\n", sqlite3_errmsg(db));
+		fprintf(stderr,
+			"Failed to prepare temporary table: %s\n",
+			sqlite3_errmsg(db));
 		sqlite3_close(db);
 		exit (EXIT_FAILURE);
 	}
 
 	/* Main loop */
-	int colLevel, colLevelPrev, colScope;
+	unsigned long maxLevel = ULONG_MAX;
+	unsigned long colLevel, colLevelPrev, colScope;
 	char *colAction;
 	while(true) {
 		if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
 			perror("sysctl");
 
-		/* Get actual for the light level actions */
-		sqlite3_bind_int(res_select, 1, illuminance);
-		while (sqlite3_step(res_select) == SQLITE_ROW) {
-			colLevel = sqlite3_column_int(res_select, 0);
-			colScope = sqlite3_column_int(res_select, 1);
-			colLevelPrev = sqlite3_column_int(res_select, 3);
-			colAction = (char *)sqlite3_column_text(res_select, 2);
-
-			/* Do actions */
-			if (colLevel != colLevelPrev)
-				exec_cmd(colAction);
-
-			/* Save the light levels to the temporary table */
-			sqlite3_bind_int(res_update, 1, colScope);
-			sqlite3_bind_int(res_update, 2, colLevel);
-
-			if (sqlite3_step(res_update) != SQLITE_DONE)
-				fprintf(stderr, "Failed to update temporary table: %s\n", sqlite3_errmsg(db));
-
-			sqlite3_reset(res_update);
+		/* Nothing is expected between the previous reached and
+		   the previous measured (if DB is not changed).
+		 */
+		if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
+		{
+			/* Get actual for the light level actions */
+			maxLevel = 0;
+			sqlite3_bind_int(res_select, 1, illuminance);
+			while (sqlite3_step(res_select) == SQLITE_ROW) {
+				colLevel = sqlite3_column_int(res_select, 0);
+				colScope = sqlite3_column_int(res_select, 1);
+				colLevelPrev = sqlite3_column_int(res_select, 3);
+				colAction = (char *)sqlite3_column_text(res_select, 2);
+        
+				/* Calculate maximal from achieved levels */
+				if (maxLevel < colLevel)
+					maxLevel = colLevel;
+        
+				/* Do actions */
+				if (colLevel != colLevelPrev)
+					exec_cmd(colAction);
+        
+				/* Save the light levels to the temporary table */
+				sqlite3_bind_int(res_update, 1, colScope);
+				sqlite3_bind_int(res_update, 2, colLevel);
+        
+				if (sqlite3_step(res_update) != SQLITE_DONE)
+					fprintf(stderr,
+						"Failed to update temporary table: %s\n",
+						sqlite3_errmsg(db));
+        
+				sqlite3_reset(res_update);
+			}
+			/* Reset for next request */
+			sqlite3_reset(res_select);
 		}
-		/* Reset for next request */
-		sqlite3_reset(res_select);
+		/* Store the measured value for next round */
+		prevIlluminance = illuminance;
 
 		sleep(5);
 	}
