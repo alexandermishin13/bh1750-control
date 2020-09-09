@@ -83,7 +83,7 @@ termination_handler(int signum)
 {
 	int rc;
 	char *drop_temp =
-	    "DROP TABLE journal;";
+	    "DROP TABLE temp;";
 
 	/* "just to make it right" */
 	do {
@@ -198,20 +198,20 @@ main(int argc, char **argv)
 	char *create_temp =
 	    "PRAGMA temp_store = MEMORY;\n"
 	    "PRAGMA journal_mode = OFF;\n"
-	    "CREATE TEMPORARY TABLE IF NOT EXISTS journal (\n"
+	    "CREATE TEMPORARY TABLE IF NOT EXISTS temp (\n"
 		"scopeid INT PRIMARY KEY NOT NULL,\n"
 		"level INT NOT NULL\n"
 	    ") WITHOUT ROWID;\n";
 
 	char *update_temp =
-	    "INSERT INTO journal (scopeid, level) VALUES (?, ?)\n"
+	    "INSERT INTO temp (scopeid, level) VALUES (?, ?)\n"
 	    "ON CONFLICT (scopeid)\n"
 	    "DO UPDATE SET level=excluded.level;";
 
 	char *select_actions =
 	    "SELECT a1.level, a1.scopeid, a1.action, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
 	    "FROM illuminance a1\n"
-	    "LEFT JOIN journal b\n"
+	    "LEFT JOIN temp b\n"
 	    "ON a1.scopeid = b.scopeid\n"
 	    "INNER JOIN (\n"
 		"SELECT MAX(level) AS max_level, scopeid\n"
@@ -247,7 +247,7 @@ main(int argc, char **argv)
 		exit (EXIT_FAILURE);
 	}
 
-	/* Create in memory temporary journal */
+	/* Create in memory temporary table */
 	do {
 		rc = sqlite3_exec(db, create_temp, 0, 0, NULL);
 	} while (rc == SQLITE_BUSY);
@@ -269,13 +269,13 @@ main(int argc, char **argv)
 		exit (EXIT_FAILURE);
 	}
 
-	/* Prepare to insert/update journaled values */
+	/* Prepare to insert/update temporary values */
 	do {
 		rc = sqlite3_prepare_v2(db, update_temp, -1, &res_update, NULL);
 	} while (rc == SQLITE_BUSY);
 
 	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Failed to prepare journal: %s\n", sqlite3_errmsg(db));
+		fprintf(stderr, "Failed to prepare temporary table: %s\n", sqlite3_errmsg(db));
 		sqlite3_close(db);
 		exit (EXIT_FAILURE);
 	}
@@ -304,11 +304,11 @@ main(int argc, char **argv)
 					);
 			}
 
-			/* Save the light levels to the journal */
+			/* Save the light levels to the temporary table */
 			sqlite3_bind_int(res_update, 1, colScope);
 			sqlite3_bind_int(res_update, 2, colLevel);
 			if (sqlite3_step(res_update) != SQLITE_DONE) {
-				fprintf(stderr, "Failed to update journal: %s\n", sqlite3_errmsg(db));
+				fprintf(stderr, "Failed to update temporary table: %s\n", sqlite3_errmsg(db));
 			}
 			sqlite3_reset(res_update);
 		}
