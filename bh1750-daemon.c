@@ -164,29 +164,48 @@ demonize(void)
 	pidfile_write(pfh);
 }
 
+static const char*
+wordexp_error(int err)
+{
+	switch (err) {
+	    case WRDE_BADCHAR:
+		return "One of the unquoted characters - <newline>, '|', '&', ';', '<', '>', '(', ')', '{', '}' - appears in an inappropriate context";
+	    case WRDE_BADVAL:
+		return "Reference to undefined shell variable when WRDE_UNDEF was set in flags to wordexp()";
+	    case WRDE_CMDSUB:
+		return "Command substitution requested when WRDE_NOCMD was set in flags to wordexp()";
+	    case WRDE_NOSPACE:
+		return "Attempt to allocate memory in wordexp() failed";
+	    case WRDE_SYNTAX:
+		return "Shell syntax error, such as unbalanced parentheses or unterminated string";
+	    default:
+		return "Unknown error from wordexp() function";
+	}
+}
+
 static void
 exec_cmd(char *arg)
 {
-	int status;
+	int rc, status;
 	pid_t pid;
 	wordexp_t we;
 
-	wordexp(arg, &we, 0);
-
-	status = posix_spawn(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
-
-	wordfree(&we);
-
-	if (debug) {
+	if ((rc = wordexp(arg, &we, WRDE_NOCMD | WRDE_SHOWERR | WRDE_UNDEF)) == 0) {
+		status = posix_spawn(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
+		wordfree(&we);
+//	if (debug) {
 		if (status == 0) {
-			if (waitpid(pid, &status, 0) != -1)
-				fprintf(stderr, "Child exited with status %i\n", status);
-			else
+			if (waitpid(pid, &status, 0) == -1)
 				perror("waitpid");
+	//		else
+	//			fprintf(stderr, "Child exited with status %i\n", status);
 		}
 		else
 			fprintf(stderr, "posix_spawn: %s\n", strerror(status));
+//	}
 	}
+	else
+		fprintf(stderr, "Failed to parse an action string [%s]\n%d: %s\n", arg, rc, wordexp_error(rc));
 }
 
 int
