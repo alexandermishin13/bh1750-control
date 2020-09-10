@@ -28,8 +28,8 @@ All You need to install:
 make
 sudo make install
 ```
-If You want to control the `bh1750` sensor by daemon You may need to add to
-`/etc/rc.conf` following line:
+If You want to control the `bh1750` sensor by daemon You may need to add
+ following lines to `/etc/rc.conf`:
 ```
 bh1750_daemon_enable="YES"
 bh1750_daemon_number="0" # Sensor number in sysctl
@@ -37,7 +37,8 @@ bh1750_daemon_dbfile="/var/db/bh1750/actions.sqlite"
 ```
 ...or execute a command from sources root directory:
 ```
-sudo cp ./rc.conf.d/ /usr/local/etc/
+sudo mkdir -p /usr/local/etc/rc.conf.d
+sudo cp ./rc.conf.d/* /usr/local/etc/rc.conf.d
 ```
 ..change it for your needs and run:
 ```
