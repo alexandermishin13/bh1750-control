@@ -2,12 +2,12 @@
 
 ## About
 
-The tools an daemon require a bh1750 sensor connected to the i2c bus and
-this kernel driver: https://gitlab.com/alexandermishin13/bh1750-kmod.
+The control utility and daemon require a bh1750 sensor connected to the i2c bus
+and this kernel driver: https://gitlab.com/alexandermishin13/bh1750-kmod.
 
 An idea of this tool is plain:
 * There is one or more rows of defined pairs: (lighting level -> action);
-* Each such row of levels has its own scope;
+* Each row of levels has its own scope;
 * After measuring the ambient light level, the action with the highest reached
 level value for each scope is performed.
 
@@ -35,12 +35,12 @@ bh1750_daemon_enable="YES"
 bh1750_daemon_number="0" # Sensor number in sysctl
 bh1750_daemon_dbfile="/var/db/bh1750/actions.sqlite"
 ```
-...or execute a command from sources root directory:
+...or execute next commands from the sources directory:
 ```
 sudo mkdir -p /usr/local/etc/rc.conf.d
 sudo cp ./rc.conf.d/* /usr/local/etc/rc.conf.d
 ```
-..change it for your needs and run:
+...change it for your needs and run:
 ```
 sudo service bh1750-daemon start
 ```
