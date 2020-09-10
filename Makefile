@@ -10,7 +10,7 @@ SCRIPTS= bh1750-control.py ${PROG}.sh
 
 SCRIPTSNAME_${PROG}.sh=		${PROG}
 SCRIPTSDIR_${PROG}.sh=		${PREFIX}/etc/rc.d
-SCRIPTSNAME_bh1750-control.py=	bh1750-control.py
+SCRIPTSNAME_bh1750-control.py=	bh1750-control
 SCRIPTSDIR_bh1750-control.py=	${PREFIX}/bin
 
 MAN=	${PROG}.8
@@ -23,7 +23,7 @@ uninstall:
 	rm ${BINDIR}/${PROG}
 	rm ${MANDIR}8/${MAN}.gz
 	rm ${PREFIX}/etc/rc.d/${PROG}
-	rm ${SCRIPTSDIR_bh1750-control.py}/${SCRIPTSNAME_bh1750-control.py}
+	rm ${SCRIPTSDIR_bh1750-control.py}/${SCRIPTSNAME_bh1750-control}
 
 check:
 	cppcheck \
