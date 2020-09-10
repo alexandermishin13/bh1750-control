@@ -259,7 +259,7 @@ main(int argc, char **argv)
 		exit (EXIT_FAILURE);
 	}
 
-	/* Prepare to select actions for achived values of light levels */
+	/* Prepare to select actions for reached values of light levels */
 	do {
 		rc = sqlite3_prepare_v2(db, select_actions, -1, &res_select, NULL);
 	} while (rc == SQLITE_BUSY);
@@ -305,7 +305,7 @@ main(int argc, char **argv)
 				colLevelPrev = sqlite3_column_int(res_select, 3);
 				colAction = (char *)sqlite3_column_text(res_select, 2);
         
-				/* Calculate maximal from achieved levels */
+				/* Calculate highest from reached levels */
 				if (maxLevel < colLevel)
 					maxLevel = colLevel;
         

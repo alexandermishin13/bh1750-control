@@ -1,26 +1,29 @@
 # $FreeBSD$
 
-PREFIX?=	/usr/local
+PREFIX?= /usr/local
 MK_DEBUG_FILES=	no
 
-PROG=		bh1750-daemon
-BINDIR=		${PREFIX}/sbin
+PROG=	bh1750-daemon
+BINDIR=	${PREFIX}/sbin
 
-FILESGROUPS= RC
-RCDIR= ${PREFIX}/etc/rc.d
-RCMODE= 0755
-RC= rc.d/${PROG}
+SCRIPTS= bh1750-control.py ${PROG}.sh
 
-MAN=		${PROG}.8
-MANDIR=		${PREFIX}/man/man
+SCRIPTSNAME_${PROG}.sh=		${PROG}
+SCRIPTSDIR_${PROG}.sh=		${PREFIX}/etc/rc.d
+SCRIPTSNAME_bh1750-control.py=	bh1750-control.py
+SCRIPTSDIR_bh1750-control.py=	${PREFIX}/bin
 
-CFLAGS+=	-Wall -I/usr/local/include
-LDADD=		-L/usr/local/lib -lc -lutil -lsqlite3
+MAN=	${PROG}.8
+MANDIR=	${PREFIX}/man/man
+
+CFLAGS+= -Wall -I/usr/local/include
+LDADD=	-L/usr/local/lib -lc -lutil -lsqlite3
 
 uninstall:
 	rm ${BINDIR}/${PROG}
 	rm ${MANDIR}8/${MAN}.gz
 	rm ${PREFIX}/etc/rc.d/${PROG}
+	rm ${SCRIPTSDIR_bh1750-control.py}/${SCRIPTSNAME_bh1750-control.py}
 
 check:
 	cppcheck \

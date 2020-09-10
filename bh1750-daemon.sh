@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $FreeBSD: 2018-08-26 18:15:00Z mishin $
+# $FreeBSD: 2020-09-10 13:20:00Z mishin $
 #
 # PROVIDE: bh1750_daemon
 # REQUIRE: DAEMON

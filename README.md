@@ -8,9 +8,8 @@ driver: https://gitlab.com/alexandermishin13/bh1750-kmod.
 An idea of this tool is plain:
 * There is one or more rows of defined pairs: (lighting level -> action);
 * Each such row of levels has its own scope;
-* After each measurement of the ambient light level, the maximum achieved
-values are selected, one for each scope, and the specified actions are
-executed.
+* After measuring the ambient light level, the action with the highest reached
+level value for each scope is performed.
 
 ## Installation
 

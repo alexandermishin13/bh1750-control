@@ -166,12 +166,16 @@ for command in ["add", "delete"]:
         p.add_argument("--level",
                        help="illuminance level for action")
 
-
 db_filename = '/var/db/bh1750/actions.sqlite'
-action = action_db(db_filename)
-light = illuminance()
 
 if __name__ == "__main__":
+    try:
+        action = action_db(db_filename)
+    except sqlite3.OperationalError as e:
+        sys.stderr.write("Operation not permitted: %s\n" % e)
+
+    light = illuminance()
+
     args = parser.parse_args()
 
     if args.command == "list":
