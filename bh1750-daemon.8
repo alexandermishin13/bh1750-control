@@ -33,4 +33,31 @@
 .Op Fl b
 .Op Fl i Ar number
 .Op Fl f Ar dbfile
+.Sh OPTIONS
+The following options are supported by
+.Nm :
+.Bl -tag -width automatic
+.It Fl b
+Run the program in background as a daemon.
+.It Fl i Ar number
+A
+.Ar number
+of the bh1750 sensor as it registered in the
+.Xr sysctl 8
+tree. Default: 0
+.It Fl f Ar dbfile
+The
+.Xr sqlite3 8
+database file which stores the commands to execute for ambient light
+levels. Default:
+.Pa /var/db/bh1750/actions.sqlite
 .Sh DESCRIPTION
+.Sh SEE ALSO
+.Xr bh1750-control 1 ,
+.Xr sysctl 8 ,
+.Xr sqlite3 8
+.Sh AUTHORS
+The
+.Nm
+was written by
+.An Alexander Mishin Aq Mt mishin@mh.net.ru .
