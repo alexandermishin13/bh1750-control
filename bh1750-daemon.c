@@ -52,6 +52,8 @@ char mibSensor[32];
 unsigned int pos = 0;
 extern char **environ;
 
+bool found = false;
+
 bool backgroundRun = false;
 bool debug = false;
 char *dbName = "/var/db/bh1750/actions.sqlite";
@@ -243,11 +245,6 @@ main(int argc, char **argv)
 	get_param(argc, argv);
 
 	sprintf(mibSensor, "dev.bh1750.%u.illuminance", pos);
-	sysctlnametomib(mibSensor, mib, &mibLen);
-
-	/* Check if device is connected */
-	if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
-		errx(EXIT_FAILURE, "Device %u is not connected", pos);
 
 	/* If background flag run as a daemon */
 	if (backgroundRun)
@@ -307,47 +304,70 @@ main(int argc, char **argv)
 	unsigned long colLevel, colLevelPrev, colScope;
 	char *colAction;
 	while(true) {
-		if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
-			perror("sysctl");
-
-		/* Nothing is expected between the previous reached and
-		   the previous measured (if DB is not changed).
-		 */
-		if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
-		{
-			/* Get actual for the light level actions */
-			maxLevel = 0;
-			sqlite3_bind_int(res_select, 1, illuminance);
-			while (sqlite3_step(res_select) == SQLITE_ROW) {
-				colLevel = sqlite3_column_int(res_select, 0);
-				colScope = sqlite3_column_int(res_select, 1);
-				colLevelPrev = sqlite3_column_int(res_select, 3);
-				colAction = (char *)sqlite3_column_text(res_select, 2);
-        
-				/* Calculate highest from reached levels */
-				if (maxLevel < colLevel)
-					maxLevel = colLevel;
-        
-				/* Do actions */
-				if (colLevel != colLevelPrev)
-					exec_cmd(colAction);
-        
-				/* Save the light levels to the temporary table */
-				sqlite3_bind_int(res_update, 1, colScope);
-				sqlite3_bind_int(res_update, 2, colLevel);
-        
-				if (sqlite3_step(res_update) != SQLITE_DONE)
-					fprintf(stderr,
-						"Failed to update temporary table: %s\n",
-						sqlite3_errmsg(db));
-        
-				sqlite3_reset(res_update);
+		/* Check if device is connected */
+		if (!found) {
+			/* If device was lost the name to mib resolution is needed again */
+			if ((sysctlnametomib(mibSensor, mib, &mibLen) == 0) &&
+			    (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == 0))
+			{
+				fprintf(stderr, "sysctl: Defice %u is found.\n", pos);
+				found = true;
 			}
-			/* Reset for next request */
-			sqlite3_reset(res_select);
 		}
-		/* Store the measured value for next round */
-		prevIlluminance = illuminance;
+		else
+			if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
+			{
+				fprintf(stderr, "sysctl: Defice %u is not found.\n", pos);
+				found = false;
+			}
+
+		/* If devise is not found do nothing but sleep */
+		if (found) {
+			/* Nothing is expected between the previous reached and
+			   the previous measured (if DB is not changed).
+			 */
+			if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
+			{
+				/* Get actual for the light level actions */
+				maxLevel = 0;
+				sqlite3_bind_int(res_select, 1, illuminance);
+				while (sqlite3_step(res_select) == SQLITE_ROW) {
+					colLevel = sqlite3_column_int(res_select, 0);
+					colScope = sqlite3_column_int(res_select, 1);
+					colLevelPrev = sqlite3_column_int(res_select, 3);
+					colAction = (char *)sqlite3_column_text(res_select, 2);
+
+					/* Calculate highest from reached levels */
+					if (maxLevel < colLevel)
+						maxLevel = colLevel;
+        
+					/* Do actions */
+					if (colLevel != colLevelPrev)
+						exec_cmd(colAction);
+
+					/* Save the light levels to the temporary table */
+					sqlite3_bind_int(res_update, 1, colScope);
+					sqlite3_bind_int(res_update, 2, colLevel);
+
+					if (sqlite3_step(res_update) != SQLITE_DONE)
+						fprintf(stderr,
+							"Failed to update temporary table: %s\n",
+							sqlite3_errmsg(db));
+
+					sqlite3_reset(res_update);
+
+				} // while (sqlite3_step(res_select)
+
+				/* Reset for next request */
+				sqlite3_reset(res_select);
+
+			} // if ((illuminance < maxLevel)...
+
+			/* Store the measured value for next round */
+			prevIlluminance = illuminance;
+
+		} // if (sysctl(mib...
+
 
 		sleep(5);
 	}
