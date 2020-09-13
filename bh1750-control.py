@@ -26,7 +26,7 @@ class illuminance():
 """
 class action_db():
     def __init__(self, filename):
-        sql_create = ("""
+        sql_create = """
             CREATE TABLE IF NOT EXISTS scopes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scope TEXT NOT NULL UNIQUE
@@ -45,19 +45,20 @@ class action_db():
             ) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS index_scope_level ON illuminance(scopeid, level);
             PRAGMA foreign_keys=ON;
-        """)
+        """
+
         try:
             self.conn = sqlite3.connect(filename)
         except sqlite3.OperationalError as e:
-            sys.stderr.write(
-                "%s\n" % e
-            )
+            sys.stderr.write("%s\n" % e)
+
+        self.cursor = self.conn.cursor()
         self.create_database(sql_create)
 
     """ Creates a database
     """
     def create_database(self, sql):
-        self.conn.executescript(sql)
+        self.cursor.executescript(sql)
         self.conn.commit()
 
     """ Adds an action for illuminance level and scope
@@ -72,8 +73,8 @@ class action_db():
             """)
 
         try:
-            self.conn.execute(sql_add_scope, (args.scope,))
-            self.conn.execute(sql_add_level, (args.level, args.scope, args.execute,))
+            self.cursor.execute(sql_add_scope, (args.scope,))
+            self.cursor.execute(sql_add_level, (args.level, args.scope, args.execute,))
             self.conn.commit()
         except sqlite3.IntegrityError:
             sys.stderr.write(
@@ -95,12 +96,12 @@ class action_db():
                 DELETE FROM illuminance
                 WHERE level=? AND scopeid=(SELECT id FROM scopes WHERE scope=?);
                 """)
-            self.conn.execute(sql_del, (level, args.scope,));
+            self.cursor.execute(sql_del, (level, args.scope,));
         else:
             sql_del = ("""
                 DELETE FROM scopes WHERE scope=?;
                 """)
-            self.conn.execute(sql_del, (args.scope,));
+            self.cursor.execute(sql_del, (args.scope,));
         self.conn.commit()
 
     """ Get all actions for max illuminance level below
@@ -115,8 +116,7 @@ class action_db():
             ) a2
             ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;
             """)
-        cursor = self.conn.cursor()
-        for level, scopeid, action in cursor.execute(sql_get_actions, (level,)):
+        for level, scopeid, action in self.cursor.execute(sql_get_actions, (level,)):
             subprocess.run(action.split())
 
     """ Prints all action definitions from DB
@@ -129,9 +129,7 @@ class action_db():
             ORDER BY scopeid, level
             """)
 
-        cursor = self.conn.cursor()
-
-        for level, scopeid, scope, action in cursor.execute(sql_list_all):
+        for level, scopeid, scope, action in self.cursor.execute(sql_list_all):
             if scope == scope_prev:
                 sys.stdout.write("{:10d} {}\n".format(level, action))
             else:
@@ -154,16 +152,16 @@ for command in ["list", "run"]:
     p = sub_parsers.add_parser(command, help=cmd_help[command])
 for command in ["add", "delete"]:
     p = sub_parsers.add_parser(command, help=cmd_help[command])
-    p.add_argument("--scope", default="Default",
+    p.add_argument("-s", "--scope", default="Default",
                    help="scope for row of actions")
     if (command == "add"):
-        p.add_argument("--level", required=True,
+        p.add_argument("-l", "--level", required=True,
                        help="illuminance level for action")
-        p.add_argument("--execute",
+        p.add_argument("-e", "--execute",
                        metavar="COMMAND",
                        help="command to execute")
     else:
-        p.add_argument("--level",
+        p.add_argument("-l", "--level",
                        help="illuminance level for action")
 
 db_filename = '/var/db/bh1750/actions.sqlite'
@@ -173,6 +171,7 @@ if __name__ == "__main__":
         action = action_db(db_filename)
     except sqlite3.OperationalError as e:
         sys.stderr.write("Operation not permitted: %s\n" % e)
+        exit(-1)
 
     light = illuminance()
 
@@ -187,3 +186,5 @@ if __name__ == "__main__":
         action.delete(args)
     elif args.command == "add":
         action.add(args)
+
+    action.conn.close()
