@@ -35,6 +35,7 @@ class action_db():
             CREATE TABLE IF NOT EXISTS illuminance (
                 level INT NOT NULL,
                 scopeid INT NOT NULL,
+                delay INT NOT NULL DEFAULT 0,
                 action TEXT NOT NULL,
                 PRIMARY KEY (level, scopeid),
                 CONSTRAINT fk_scopes

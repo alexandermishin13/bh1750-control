@@ -43,6 +43,8 @@
 #include <spawn.h>
 #include <sys/wait.h>
 
+#define LOOP_TIMEOUT_SECONDS 5
+
 struct pidfh *pfh;
 sqlite3 *db;
 sqlite3_stmt *res_select;
@@ -222,16 +224,17 @@ main(int argc, char **argv)
 	    "PRAGMA journal_mode = OFF;\n"
 	    "CREATE TEMPORARY TABLE IF NOT EXISTS temp (\n"
 		"scopeid INT PRIMARY KEY NOT NULL,\n"
-		"level INT NOT NULL\n"
+		"level INT NOT NULL,\n"
+		"countdown INT NOT NULL DEFAULT 0\n"
 	    ") WITHOUT ROWID;\n";
 
 	char *update_temp =
-	    "INSERT INTO temp (scopeid, level) VALUES (?, ?)\n"
+	    "INSERT INTO temp (scopeid, level, countdown) VALUES (?, ?, ?)\n"
 	    "ON CONFLICT (scopeid)\n"
-	    "DO UPDATE SET level=excluded.level;";
+	    "DO UPDATE SET level=EXCLUDED.level, countdown=EXCLUDED.countdown;\n";
 
 	char *select_actions =
-	    "SELECT a1.level, a1.scopeid, a1.action, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
+	    "SELECT a1.level, a1.scopeid, a1.delay, a1.action, b.countdown, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
 	    "FROM illuminance a1\n"
 	    "LEFT JOIN temp b\n"
 	    "ON a1.scopeid = b.scopeid\n"
@@ -239,7 +242,7 @@ main(int argc, char **argv)
 		"SELECT MAX(level) AS max_level, scopeid\n"
 		"FROM illuminance WHERE level <= ? GROUP BY scopeid\n"
 	    ") a2\n"
-	    "ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid";
+	    "ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;\n";
 
 	/* Analize params and set backgroundRun and pos */
 	get_param(argc, argv);
@@ -300,8 +303,8 @@ main(int argc, char **argv)
 	}
 
 	/* Main loop */
-	unsigned long maxLevel = ULONG_MAX;
-	unsigned long colLevel, colLevelPrev, colScope;
+	unsigned long colLevel, colLevelPrev, colScope, colDelay;
+	long colCountdown, maxLevel = ULONG_MAX;
 	char *colAction;
 	while(true) {
 		/* Check if device is connected */
@@ -310,14 +313,14 @@ main(int argc, char **argv)
 			if ((sysctlnametomib(mibSensor, mib, &mibLen) == 0) &&
 			    (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == 0))
 			{
-				fprintf(stderr, "sysctl: Defice %u is found.\n", pos);
+				fprintf(stderr, "sysctl: Device %u is found.\n", pos);
 				found = true;
 			}
 		}
 		else
 			if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
 			{
-				fprintf(stderr, "sysctl: Defice %u is not found.\n", pos);
+				fprintf(stderr, "sysctl: Device %u is not found.\n", pos);
 				found = false;
 			}
 
@@ -329,25 +332,51 @@ main(int argc, char **argv)
 			if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
 			{
 				/* Get actual for the light level actions */
-				maxLevel = 0;
+				maxLevel = -1;
 				sqlite3_bind_int(res_select, 1, illuminance);
 				while (sqlite3_step(res_select) == SQLITE_ROW) {
 					colLevel = sqlite3_column_int(res_select, 0);
 					colScope = sqlite3_column_int(res_select, 1);
-					colLevelPrev = sqlite3_column_int(res_select, 3);
-					colAction = (char *)sqlite3_column_text(res_select, 2);
+					colDelay = sqlite3_column_int(res_select, 2);
+					colCountdown = sqlite3_column_int(res_select, 4);
+					colLevelPrev = sqlite3_column_int(res_select, 5);
+					colAction = (char *)sqlite3_column_text(res_select, 3);
 
 					/* Calculate highest from reached levels */
 					if (maxLevel < colLevel)
 						maxLevel = colLevel;
-        
-					/* Do actions */
-					if (colLevel != colLevelPrev)
-						exec_cmd(colAction);
+
+					if (colLevel != colLevelPrev) {
+						/* If reached level is other set delay for countdown */
+						if (colDelay > 0)
+							colCountdown = colDelay;
+						else {
+							/* Do action and mark it by -1 */
+							exec_cmd(colAction);
+							colCountdown = -1;
+						}
+
+						/* Anyway, set colCountdown to the delay value */
+					}
+					else {
+						/* If reached level is same countdown the delay or do action */
+						if (colCountdown > LOOP_TIMEOUT_SECONDS)
+							colCountdown -= LOOP_TIMEOUT_SECONDS;
+						else {
+							/* If last turn do action and mark it by -1
+							    else do nothing */
+							if (colCountdown >= 0) {
+								/* Do action and mark it by -1 */
+								exec_cmd(colAction);
+								colCountdown = -1;
+							}
+						}
+					}
 
 					/* Save the light levels to the temporary table */
 					sqlite3_bind_int(res_update, 1, colScope);
 					sqlite3_bind_int(res_update, 2, colLevel);
+					sqlite3_bind_int(res_update, 3, colCountdown);
 
 					if (sqlite3_step(res_update) != SQLITE_DONE)
 						fprintf(stderr,
@@ -369,6 +398,6 @@ main(int argc, char **argv)
 		} // if (sysctl(mib...
 
 
-		sleep(5);
+		sleep(LOOP_TIMEOUT_SECONDS);
 	}
 }
