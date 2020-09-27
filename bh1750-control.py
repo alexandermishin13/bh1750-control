@@ -69,13 +69,13 @@ class action_db():
             INSERT OR IGNORE INTO scopes(scope) VALUES(?);
             """)
         sql_add_level = ("""
-            INSERT INTO illuminance (level, scopeid, action)
-            VALUES (?, (SELECT id FROM scopes WHERE scope = ?), ?);
+            INSERT INTO illuminance (level, scopeid, delay, action)
+            VALUES (?, (SELECT id FROM scopes WHERE scope = ?), ?, ?);
             """)
 
         try:
             self.cursor.execute(sql_add_scope, (args.scope,))
-            self.cursor.execute(sql_add_level, (args.level, args.scope, args.execute,))
+            self.cursor.execute(sql_add_level, (args.level, args.scope, args.delay, args.execute,))
             self.conn.commit()
         except sqlite3.IntegrityError:
             sys.stderr.write(
@@ -125,25 +125,28 @@ class action_db():
     def list_all(self):
         scope_prev = ""
         sql_list_all = ("""
-            SELECT level, scopeid, scope, action FROM illuminance, scopes
+            SELECT level, scopeid, scope, delay, action FROM illuminance, scopes
             WHERE illuminance.scopeid = scopes.id
             ORDER BY scopeid, level
             """)
 
-        for level, scopeid, scope, action in self.cursor.execute(sql_list_all):
+        for level, scopeid, scope, delay, action in self.cursor.execute(sql_list_all):
             if scope == scope_prev:
                 sys.stdout.write("{:10d} {}\n".format(level, action))
             else:
                 sys.stdout.write("[{}:{}]\n".format(scopeid, scope))
-                sys.stdout.write("{:10d} {}\n".format(level, action))
+                if delay > 0:
+                   sys.stdout.write("{:10d} {} (After: {} sec)\n".format(level, action, delay))
+                else:
+                   sys.stdout.write("{:10d} {}\n".format(level, action))
                 scope_prev = scope
 
 
 cmd_help = {
-            'run' : 'run the actions for actual lighting level',
-            'list' : 'output all the actions list',
-            'add' : 'add an action for a lighting level [and for a scope]',
-            'delete' : 'delete an action'
+            'run' : 'execute the command for actual lighting level',
+            'list' : 'output a list of all planned actions',
+            'add' : 'add a command to execute for a lighting level in a scope',
+            'delete' : 'delete a planned action'
            }
 
 parser = argparse.ArgumentParser(description='An illuminance level action')
@@ -156,14 +159,16 @@ for command in ["add", "delete"]:
     p.add_argument("-s", "--scope", default="Default",
                    help="scope for row of actions")
     if (command == "add"):
+        p.add_argument("-t", "--delay",
+                       help="seconds to delay before command")
         p.add_argument("-l", "--level", required=True,
-                       help="illuminance level for action")
-        p.add_argument("-e", "--execute",
+                       help="illuminance level for command")
+        p.add_argument("-e", "--execute", required=True,
                        metavar="COMMAND",
                        help="command to execute")
     else:
         p.add_argument("-l", "--level",
-                       help="illuminance level for action")
+                       help="illuminance level for command")
 
 db_filename = '/var/db/bh1750/actions.sqlite'
 
