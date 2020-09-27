@@ -17,6 +17,6 @@ CREATE TABLE illuminance (
         ON DELETE CASCADE
 ) WITHOUT ROWID;
 DELETE FROM sqlite_sequence;
-INSERT INTO sqlite_sequence VALUES('scopes',1);
+INSERT INTO sqlite_sequence VALUES('scopes',0);
 CREATE INDEX index_scope_level ON illuminance(scopeid, level);
 COMMIT;
