@@ -29,25 +29,33 @@
 .Nm bh1750-daemon
 .Nd Ambient light control daemon for bh1750 kernel driver
 .Sh SYNOPSIS
-.Nm Op Fl b Op Fl i Ar number Op Fl f Ar dbfile
+.Nm
+.Op Fl b
+.Op Fl i Ar number
+.Op Fl f Ar db_file
+.Op Fl p Ar pid_file
 .Sh OPTIONS
 The following options are supported by
 .Nm :
 .Bl -tag -width automatic
 .It Fl b
-Run the program in background as a daemon.
+Run the program in background as a daemon;
 .It Fl i Ar number
 A
 .Ar number
 of the bh1750 sensor as it registered in the
 .Xr sysctl 8
-tree. Default: 0
-.It Fl f Ar dbfile
-The
+tree. The default is 0;
+.It Fl f Ar db_file
+Specify a
 .Xr sqlite3 8
 database file which stores the commands to execute for ambient light
-levels. Default:
-.Pa /var/db/bh1750/actions.sqlite
+levels. The default is
+.Pa /var/db/bh1750/actions.sqlite ;
+.It Fl p Ar pid_file
+Specify an alternative file in which to store the process ID.
+The default is 
+.Pa /var/run/ Ns Nm Ns Pa .pid .
 .Sh DESCRIPTION
 The daemon works with a kernel driver
 .Xr bh1750 4

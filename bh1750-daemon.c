@@ -58,14 +58,15 @@ bool found = false;
 
 bool backgroundRun = false;
 bool debug = false;
-char *dbName = "/var/db/bh1750/actions.sqlite";
+const char *dbFile = "/var/db/bh1750/actions.sqlite";
+const char *pidFile = NULL; // Use name by default when omit
 
 /* Print usage after mistaken params */
 static void
 usage(char* program)
 {
   printf("Usage:\n"
-	 " %s [-b] [-i <pos>] [-f <dbfile>]\n", program);
+	 " %s [-b] [-i <pos>] [-f <dbfile>] [-p <pidfile>]\n", program);
 }
 
 /* Position of the device instance in the sysctl mib */
@@ -111,7 +112,7 @@ get_param(int argc, char **argv)
 {
 	int opt;
 
-	while((opt = getopt(argc, argv, "hbdi:f:")) != -1) {
+	while((opt = getopt(argc, argv, "hbdi:f:p:")) != -1) {
 		switch(opt) {
 		    case 'b': // run in background as a daemon
 			backgroundRun = true;
@@ -122,7 +123,11 @@ get_param(int argc, char **argv)
 			break;
 
 		    case 'f': // db filename
-			dbName = optarg;
+			dbFile = optarg;
+			break;
+
+		    case 'p': // pid filename
+			pidFile = optarg;
 			break;
 
 		    case 'i':
@@ -145,7 +150,7 @@ demonize(void)
 	pid_t otherpid;
 
 	/* Try to create a pidfile */
-	pfh = pidfile_open(NULL, 0600, &otherpid);
+	pfh = pidfile_open(pidFile, 0600, &otherpid);
 	if (pfh == NULL) {
 		if (errno == EEXIST)
 			errx (EXIT_FAILURE, "Daemon already running, pid: %jd.", (intmax_t)otherpid);
@@ -259,7 +264,7 @@ main(int argc, char **argv)
 	if (signal (SIGTERM, termination_handler) == SIG_IGN)
 		signal (SIGTERM, SIG_IGN);
 
-	rc = sqlite3_open(dbName, &db);
+	rc = sqlite3_open(dbFile, &db);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
