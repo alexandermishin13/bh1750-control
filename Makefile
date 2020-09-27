@@ -13,7 +13,7 @@ SCRIPTSDIR_${PROG}.sh=		${PREFIX}/etc/rc.d
 SCRIPTSNAME_bh1750-control.py=	bh1750-control
 SCRIPTSDIR_bh1750-control.py=	${PREFIX}/bin
 
-MAN=	${PROG}.8
+MAN=	bh1750-control.1 ${PROG}.8
 MANDIR=	${PREFIX}/man/man
 
 CFLAGS+= -Wall -I/usr/local/include

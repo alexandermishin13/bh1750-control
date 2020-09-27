@@ -1,0 +1,84 @@
+.\"-
+.\"Copyright (c) 2020, Alexander Mishin
+.\"All rights reserved.
+.\"
+.\"Redistribution and use in source and binary forms, with or without
+.\"modification, are permitted provided that the following conditions are met:
+.\"
+.\"* Redistributions of source code must retain the above copyright notice, this
+.\"  list of conditions and the following disclaimer.
+.\"
+.\"* Redistributions in binary form must reproduce the above copyright notice,
+.\"  this list of conditions and the following disclaimer in the documentation
+.\"  and/or other materials provided with the distribution.
+.\"
+.\"THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+.\"AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\"IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+.\"DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+.\"FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\"DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+.\"SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+.\"CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+.\"OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+.\"OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.Dd Sep 13, 2020
+.Dt BH1750-CONTROL 1
+.Os
+.Sh NAME
+.Nm bh1750-control
+.Nd Ambient light control utility for bh1750 kernel driver
+.Sh SYNOPSIS
+.Nm Ar list
+.Nm Ar add Fl s Ar scope Fl l Ar level Fl e Ar command Op Fl t Ar delay
+.Nm Ar delete Fl s Ar scope Op Fl l Ar level
+.Nm Ar run
+.Sh OPTIONS
+The following options are supported by
+.Nm :
+.Bl -tag -width automatic
+.It Fl h
+Prints a short help. Alse may be used for a help for a command.
+.It Fl s Ar scope
+Name for a whole set of defined level-command pairs. May be needed more
+than one scope for one task;
+.It Fl l Ar level
+Level of the light in millilux to add or delete a command definition;
+.It Fl e Ar command
+Command to execute when the illumination level in a certain area is
+reached;
+.It Fl t Ar delay
+Command execution delay time in seconds. The command will be canceled
+if during this time a change in illumination leads to a change of the
+reached level in the defined scope.
+.Sh EXAMPLES
+The next lines specify a set of notifications for certain light levels
+named "message" and a set for controlling gpio-pin 20 named "gpio" for
+another list of light levels. In second case, for complete darkness, a
+command execution delay of 60 seconds is set.
+
+Then the ambient light level is measured, according to the result of
+which two commands will be executed, one for each of the sets.
+
+Finally, both sets are removed.
+.Bd -literal
+# bh1750-control add -s message -l 10000 -e "/bin/echo reached 10000nx"
+# bh1750-control add -s message -l 20000 -e "/bin/echo reached 20000nx"
+# bh1750-control add -s message -l 50000 -e "/bin/echo reached 50000nx"
+
+# bh1750-control add -s gpio -l 0 -t 60 -e "/usr/sbin/gpioctl 20 0"
+# bh1750-control add -s gpio -l 50000 -e "/usr/sbin/gpioctl 20 1"
+
+# bh1750-control run
+
+# bh1750-control delete -s message
+# bh1750-control delete -s gpio
+.Ed
+.Sh SEE ALSO
+.Xr bh1750 4 ,
+.Xr bh1750-daemon 8 ,
+.Sh AUTHORS
+The
+.Nm
+was written by
+.An Alexander Mishin Aq Mt mishin@mh.net.ru .
