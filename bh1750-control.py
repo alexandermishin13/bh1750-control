@@ -144,7 +144,7 @@ class action_db():
 
 cmd_help = {
             'run' : 'execute the command for actual lighting level',
-            'list' : 'output a list of all planned actions',
+            'list' : 'list of all planned actions',
             'add' : 'add a command to execute for a lighting level in a scope',
             'delete' : 'delete a planned action'
            }
@@ -153,22 +153,26 @@ parser = argparse.ArgumentParser(description='An illuminance level action')
 sub_parsers = parser.add_subparsers(title="commands", dest="command")
 
 for command in ["list", "run"]:
-    p = sub_parsers.add_parser(command, help=cmd_help[command])
+    p = sub_parsers.add_parser(command, 
+                               help=cmd_help[command],
+                               description=cmd_help[command].title())
 for command in ["add", "delete"]:
-    p = sub_parsers.add_parser(command, help=cmd_help[command])
-    p.add_argument("-s", "--scope", default="Default",
-                   help="scope for row of actions")
+    p = sub_parsers.add_parser(command,
+                               help=cmd_help[command],
+                               description=cmd_help[command].title())
+    p.add_argument("-s", "--scope", default="Default", required=True,
+                   help="scope for row of levels and commands")
     if (command == "add"):
         p.add_argument("-t", "--delay",
                        help="seconds to delay before command")
         p.add_argument("-l", "--level", required=True,
-                       help="illuminance level for command")
+                       help="illuminance level for command to execute")
         p.add_argument("-e", "--execute", required=True,
                        metavar="COMMAND",
                        help="command to execute")
     else:
         p.add_argument("-l", "--level",
-                       help="illuminance level for command")
+                       help="illuminance level for command to execute")
 
 db_filename = '/var/db/bh1750/actions.sqlite'
 
