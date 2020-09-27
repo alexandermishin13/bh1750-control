@@ -26,27 +26,27 @@ class illuminance():
 """
 class action_db():
     def __init__(self, filename):
-        sql_create = """
-            CREATE TABLE IF NOT EXISTS scopes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scope TEXT NOT NULL UNIQUE
-            );
-            INSERT OR IGNORE INTO scopes VALUES(0,'Default');
-            CREATE TABLE IF NOT EXISTS illuminance (
-                level INT NOT NULL,
-                scopeid INT NOT NULL,
-                delay INT NOT NULL DEFAULT 0,
-                action TEXT NOT NULL,
-                PRIMARY KEY (level, scopeid),
-                CONSTRAINT fk_scopes
-                    FOREIGN KEY (scopeid)
-                    REFERENCES scopes(id)
-                    ON UPDATE CASCADE
-                    ON DELETE CASCADE
-            ) WITHOUT ROWID;
-            CREATE INDEX IF NOT EXISTS index_scope_level ON illuminance(scopeid, level);
-            PRAGMA foreign_keys=ON;
-        """
+        sql_create = (
+            "CREATE TABLE IF NOT EXISTS scopes (\n"
+            "    id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+            "    scope TEXT NOT NULL UNIQUE\n"
+            ");\n"
+            "INSERT OR IGNORE INTO scopes VALUES(0,'Default');\n"
+            "CREATE TABLE IF NOT EXISTS illuminance (\n"
+            "    level INT NOT NULL,\n"
+            "    scopeid INT NOT NULL,\n"
+            "    delay INT NOT NULL DEFAULT 0,\n"
+            "    action TEXT NOT NULL,\n"
+            "    PRIMARY KEY (level, scopeid),\n"
+            "    CONSTRAINT fk_scopes\n"
+            "        FOREIGN KEY (scopeid)\n"
+            "        REFERENCES scopes(id)\n"
+            "        ON UPDATE CASCADE\n"
+            "        ON DELETE CASCADE\n"
+            ") WITHOUT ROWID;\n"
+            "CREATE INDEX IF NOT EXISTS index_scope_level ON illuminance(scopeid, level);\n"
+            "PRAGMA foreign_keys=ON;\n"
+        )
 
         try:
             self.conn = sqlite3.connect(filename)
@@ -65,13 +65,13 @@ class action_db():
     """ Adds an action for illuminance level and scope
     """
     def add(self, args):
-        sql_add_scope = ("""
-            INSERT OR IGNORE INTO scopes(scope) VALUES(?);
-            """)
-        sql_add_level = ("""
-            INSERT INTO illuminance (level, scopeid, delay, action)
-            VALUES (?, (SELECT id FROM scopes WHERE scope = ?), ?, ?);
-            """)
+        sql_add_scope = (
+            "INSERT OR IGNORE INTO scopes(scope) VALUES(?);\n"
+        )
+        sql_add_level = (
+            "INSERT INTO illuminance (level, scopeid, delay, action)\n"
+            "VALUES (?, (SELECT id FROM scopes WHERE scope = ?), ?, ?);\n"
+        )
 
         try:
             self.cursor.execute(sql_add_scope, (args.scope,))
@@ -93,15 +93,15 @@ class action_db():
     def delete(self, args):
         level = args.level
         if level != None:
-            sql_del = ("""
-                DELETE FROM illuminance
-                WHERE level=? AND scopeid=(SELECT id FROM scopes WHERE scope=?);
-                """)
+            sql_del = (
+                "DELETE FROM illuminance\n"
+                "WHERE level=? AND scopeid=(SELECT id FROM scopes WHERE scope=?);\n"
+            )
             self.cursor.execute(sql_del, (level, args.scope,));
         else:
-            sql_del = ("""
-                DELETE FROM scopes WHERE scope=?;
-                """)
+            sql_del = (
+                "DELETE FROM scopes WHERE scope=?;\n"
+            )
             self.cursor.execute(sql_del, (args.scope,));
         self.conn.commit()
 
@@ -109,14 +109,14 @@ class action_db():
         specified one for all scopes
     """
     def run_actions(self, level):
-        sql_get_actions = ("""
-            SELECT a1.level, a1.scopeid, a1.action FROM illuminance a1
-            INNER JOIN (
-                SELECT MAX(level) AS max_level, scopeid
-                FROM illuminance WHERE level <= ? GROUP BY scopeid
-            ) a2
-            ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;
-            """)
+        sql_get_actions = (
+            "SELECT a1.level, a1.scopeid, a1.action FROM illuminance a1\n"
+            "INNER JOIN (\n"
+            "    SELECT MAX(level) AS max_level, scopeid\n"
+            "    FROM illuminance WHERE level <= ? GROUP BY scopeid\n"
+            ") a2\n"
+            "ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;\n"
+        )
         for level, scopeid, action in self.cursor.execute(sql_get_actions, (level,)):
             subprocess.run(action.split())
 
@@ -124,11 +124,11 @@ class action_db():
     """
     def list_all(self):
         scope_prev = ""
-        sql_list_all = ("""
-            SELECT level, scopeid, scope, delay, action FROM illuminance, scopes
-            WHERE illuminance.scopeid = scopes.id
-            ORDER BY scopeid, level
-            """)
+        sql_list_all = (
+            "SELECT level, scopeid, scope, delay, action FROM illuminance, scopes\n"
+            "WHERE illuminance.scopeid = scopes.id\n"
+            "ORDER BY scopeid, level\n"
+        )
 
         for level, scopeid, scope, delay, action in self.cursor.execute(sql_list_all):
             if scope == scope_prev:
@@ -143,10 +143,10 @@ class action_db():
 
 
 cmd_help = {
-            'run' : 'execute the command for actual lighting level',
-            'list' : 'list of all planned actions',
-            'add' : 'add a command to execute for a lighting level in a scope',
-            'delete' : 'delete a planned action'
+            "run"    : "execute the command for actual lighting level",
+            "list"   : "list of all planned actions",
+            "add"    : "add a command to execute for a lighting level in a scope",
+            "delete" : "delete a planned action",
            }
 
 parser = argparse.ArgumentParser(description='An illuminance level action')
@@ -160,14 +160,18 @@ for command in ["add", "delete"]:
     p = sub_parsers.add_parser(command,
                                help=cmd_help[command],
                                description=cmd_help[command].title())
-    p.add_argument("-s", "--scope", default="Default", required=True,
+    p.add_argument("-s", "--scope",
+                   default="Default",
                    help="scope for row of levels and commands")
     if (command == "add"):
         p.add_argument("-t", "--delay",
+                       default = 0,
                        help="seconds to delay before command")
-        p.add_argument("-l", "--level", required=True,
+        p.add_argument("-l", "--level",
+                       required=True,
                        help="illuminance level for command to execute")
-        p.add_argument("-e", "--execute", required=True,
+        p.add_argument("-e", "--execute",
+                       required=True,
                        metavar="COMMAND",
                        help="command to execute")
     else:

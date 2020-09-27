@@ -30,8 +30,12 @@
 .Nd Ambient light control utility for bh1750 kernel driver
 .Sh SYNOPSIS
 .Nm Ar list
-.Nm Ar add Fl s Ar scope Fl l Ar level Fl e Ar command Op Fl t Ar delay
-.Nm Ar delete Fl s Ar scope Op Fl l Ar level
+.Nm Ar add Fl l Ar level Fl e Ar command
+.Op Fl s Ar scope
+.Op Fl t Ar delay
+.Nm Ar delete
+.Op Fl s Ar scope
+.Op Fl l Ar level
 .Nm Ar run
 .Sh OPTIONS
 The following options are supported by
@@ -41,7 +45,7 @@ The following options are supported by
 Prints a short help. Alse may be used for a help for a command.
 .It Fl s Ar scope
 Name for a whole set of defined level-command pairs. May be needed more
-than one scope for one task;
+than one scope for one task. Default is "Default";
 .It Fl l Ar level
 Level of the light in millilux to add or delete a command definition;
 .It Fl e Ar command
@@ -50,7 +54,7 @@ reached;
 .It Fl t Ar delay
 Command execution delay time in seconds. The command will be canceled
 if during this time a change in illumination leads to a change of the
-reached level in the defined scope.
+reached level in the defined scope. Default is 0.
 .Sh EXAMPLES
 The next lines specify a set of notifications for certain light levels
 named "message" and a set for controlling gpio-pin 20 named "gpio" for
