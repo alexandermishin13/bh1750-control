@@ -26,10 +26,11 @@ load_rc_config $name
 : ${bh1750_daemon_flags:="-b"}
 : ${bh1750_daemon_number:="0"}
 : ${bh1750_daemon_dbfile:="/var/db/bh1750/actions.sqlite"}
+: ${bh1750_daemon_pidfile:="/var/run/bh1750-daemon.pid"}
 
-pidfile=${bh1750_daemon_pidfile-"/var/run/bh1750-daemon.pid"}
+pidfile=${bh1750_daemon_pidfile}
 bh1750_daemon_bin="/usr/local/sbin/bh1750-daemon"
 command=${bh1750_daemon_bin}
-command_args="-i ${bh1750_daemon_number} -f ${bh1750_daemon_dbfile}"
+command_args="-i ${bh1750_daemon_number} -f ${bh1750_daemon_dbfile} -p ${pidfile}"
 
 run_rc_command "$@"
