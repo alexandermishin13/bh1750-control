@@ -21,7 +21,7 @@ sudo pkg install py37-sysctl
 The SQLite library must also be compiled with neither SQLITE_OMIT_FOREIGN_KEY
 nor SQLITE_OMIT_TRIGGER.
 
-## Installation
+## Installation and run
 
 All You need to install:
 ```
@@ -32,19 +32,20 @@ If You want to control the `bh1750` sensor by daemon You may need to add
  following lines to `/etc/rc.conf`:
 ```
 bh1750_daemon_enable="YES"
-bh1750_daemon_number="0" # Sensor number in sysctl
+bh1750_daemon_number="0" # Sensor number in sysctl.
 bh1750_daemon_dbfile="/var/db/bh1750/actions.sqlite"
+bh1750_daemon_pidfile="/var/db/bh1750-daemon.pid"
 ```
-...or execute next commands from the sources directory:
-```
-sudo mkdir -p /usr/local/etc/rc.conf.d
-sudo cp ./rc.conf.d/* /usr/local/etc/rc.conf.d
-```
-...change it for your needs and run:
+...or use a profile based configuration for multiple sensors. (See
+`rc.conf.d/bh1750_daemon` for example. You can copy it along with the folder
+to `/usr/local/etc/` instead of use `/etc/rc.conf` and change it for your
+needs).
+
+Now You can run the service[-s] by:
 ```
 sudo service bh1750-daemon start
 ```
-The above values are hardcoded in the daemon source code as defaults.
+The above values are hardcoded in the daemon service script as defaults.
 If you omit lines with them, they will still be used.
 
 ## Usage
@@ -59,14 +60,14 @@ database:
 * **run** for measure light, compute levels and execute actions.
 You can run it by `cron` at most once a minute.
 
-### Daemon
+### Service
 
-Or You can use a daemon `bh1750-daemon` for run the actions.
+Or You can use a service `bh1750-daemon` for run the actions.
 The daemon reads the `dev.bh1750.%u.illuminance` variable for measured light
-level, searches the database, and runs the commands it finds. With the daemon
-You may set delays for commands. During the delay, the command can be
-automatically canceled if the illumination changes significantly, or executed
-after the delay has expired.
+level, searches the database for commands and runs it. With the daemon You may
+set delays for commands. During the delay, the command can be automatically
+canceled if the illumination changes significantly, or executed after the delay
+has expired.
 
 ## Status
 
