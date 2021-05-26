@@ -63,7 +63,7 @@ You can run it by `cron` at most once a minute.
 ### Service
 
 Or You can use a service `bh1750-daemon` for run the actions.
-The daemon reads the `dev.bh1750.%u.illuminance` variable for measured light
+The daemon reads the `/dev/bh1750/<n>` character device for measured light
 level, searches the database for commands and runs it. With the daemon You may
 set delays for commands. During the delay, the command can be automatically
 canceled if the illumination changes significantly, or executed after the delay
