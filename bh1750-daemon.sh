@@ -12,8 +12,8 @@
 #				Set to "YES" to enable bh1750_daemon.
 # bh1750_daemon_profiles (str):	Set to "" by default.
 #				Define your profiles here.
-# bh1750_daemon_number (str):	Set to "0" by default.
-#				Set one from sysctl dev.bh1750.<number>
+# bh1750_daemon_devfile (str):	Set to "/dev/bh1750/0" by default.
+#				Define a cdev
 # bh1750_daemon_dbfile (str):	Set to "/var/db/bh1750/actions.sqlite" by default.
 #				Set sqlite3 db file here
 # bh1750_daemon_pidfile (str):	Set to "/var/run/bh1750-daemon.pid" by default
@@ -24,7 +24,7 @@
 # For a profile based configuration use variables like this:
 #
 # bh1750_daemon_profiles="XXX"
-# bh1750_daemon_XXX_number
+# bh1750_daemon_XXX_devfile
 # bh1750_daemon_XXX_dbfile
 # bh1750_daemon_XXX_pidfile
 # bh1750_daemon_XXX_flags
@@ -38,7 +38,7 @@ load_rc_config $name
 
 : ${bh1750_daemon_enable:="NO"}
 : ${bh1750_daemon_flags:="-b"}
-: ${bh1750_daemon_number:="0"}
+: ${bh1750_daemon_devfile:="/dev/bh1750/0"}
 : ${bh1750_daemon_dbfile:="/var/db/bh1750/actions.sqlite"}
 : ${bh1750_daemon_pidfile:="/var/run/bh1750-daemon.pid"}
 
@@ -63,7 +63,7 @@ if [ -n "${bh1750_daemon_profiles}" ]; then
 			exit 1
 		fi
 		eval pidfile=\${bh1750_daemon_${profile}_pidfile:-"/var/run/bh1750-daemon-${profile}.pid"}
-		eval bh1750_daemon_number=\${bh1750_daemon_${profile}_number:-"${bh1750_daemon_number}"}
+		eval bh1750_daemon_devfile=\${bh1750_daemon_${profile}_devfile:-"${bh1750_daemon_devfile}"}
 		eval bh1750_daemon_dbfile=\${bh1750_daemon_${profile}_dbfile:-"${bh1750_daemon_dbfile}"}
 	elif [ -n "$1" ]; then
 		for profile in ${bh1750_daemon_profiles}; do
@@ -81,6 +81,6 @@ if [ -n "${bh1750_daemon_profiles}" ]; then
 fi
 
 command=${bh1750_daemon_bin}
-command_args="-i ${bh1750_daemon_number} -f ${bh1750_daemon_dbfile} -p ${pidfile} ${bh1750_daemon_flags}"
+command_args="-s ${bh1750_daemon_devfile} -f ${bh1750_daemon_dbfile} -p ${pidfile} ${bh1750_daemon_flags}"
 
 run_rc_command "$@"

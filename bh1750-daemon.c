@@ -38,21 +38,21 @@
 #include <stdbool.h>
 #include <libutil.h>
 #include <sqlite3.h>
-#include <sys/sysctl.h>
 #include <wordexp.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <sys/event.h>
+#include <fcntl.h>
 
+#define ULONG_DECIMAL_LENGTH ((size_t) (sizeof(unsigned long) * CHAR_BIT * 0.302) + 3)
 #define LOOP_TIMEOUT_SECONDS 5
 
 struct pidfh *pfh;
 sqlite3 *db;
 sqlite3_stmt *res_select;
-int mib[4];
-size_t mibLen = 4;
-char mibSensor[32];
-unsigned int pos = 0;
 extern char **environ;
+char *dev_bh1750 = "/dev/bh1750/0";
+int dev;
 
 bool found = false;
 
@@ -69,340 +69,379 @@ usage(char* program)
 	 " %s [-b] [-i <pos>] [-f <dbfile>] [-p <pidfile>]\n", program);
 }
 
-/* Position of the device instance in the sysctl mib */
-static unsigned int
-get_position(char *flag_i)
-{
-	unsigned int number;
-	const char *errstr;
-
-	number = strtonum(flag_i, 0, 9, &errstr);
-	if (errstr != NULL)
-		errx(EXIT_FAILURE, "The device number is %s: %s (must be from %d to %d)", errstr, flag_i, 0, 9);
-
-	return number;
-}
-
 /* Signals handler. Prepare the programm for end */
 static void
 termination_handler(int signum)
 {
-	int rc;
-	char *drop_temp =
-	    "DROP TABLE temp;";
+    int rc;
+    char *drop_temp =
+	"DROP TABLE temp;";
 
-	/* "just to make it right" */
-	do {
-		rc = sqlite3_exec(db, drop_temp, 0, 0, NULL);
-	} while (rc == SQLITE_BUSY);
+    /* "just to make it right" */
+    do {
+	rc = sqlite3_exec(db, drop_temp, 0, 0, NULL);
+    } while (rc == SQLITE_BUSY);
 
-	/* Close the database */
-	sqlite3_finalize(res_select);
-	sqlite3_close(db);
+    /* Close the database */
+    sqlite3_finalize(res_select);
+    sqlite3_close(db);
 
-	/* Remove pidfile and exit */
-	pidfile_remove(pfh);
+    /* Close device */
+    close(dev);
 
-	exit(EXIT_SUCCESS);
+    /* Remove pidfile and exit */
+    pidfile_remove(pfh);
+
+    exit(EXIT_SUCCESS);
 }
 
 /* Get and decode params */
 static void
 get_param(int argc, char **argv)
 {
-	int opt;
+    int opt;
 
-	while((opt = getopt(argc, argv, "hbdi:f:p:")) != -1) {
-		switch(opt) {
-		    case 'b': // run in background as a daemon
-			backgroundRun = true;
-			break;
-
-		    case 'd': // debug messages
-			debug = true;
-			break;
-
-		    case 'f': // db filename
-			dbFile = optarg;
-			break;
-
-		    case 'p': // pid filename
-			pidFile = optarg;
-			break;
-
-		    case 'i':
-			pos = get_position(optarg);
-			break;
-
-		    case 'h': // help request
-		    case '?': // unknown option...
-		    default:
-			usage(argv[0]);
-        exit (0);
-		}
+    while((opt = getopt(argc, argv, "hbdf:p:s:")) != -1) {
+	switch(opt) {
+	case 'b': // run in background as a daemon
+	    backgroundRun = true;
+	    break;
+	case 'd': // debug messages
+	    debug = true;
+	    break;
+	case 's': // sensor cdev
+	    dev_bh1750 = optarg;
+	    break;
+	case 'f': // db filename
+	    dbFile = optarg;
+	    break;
+	    case 'p': // pid filename
+	    pidFile = optarg;
+	    break;
+	case 'h': // help request
+	    /* FALLTHROUGH */
+	case '?': // unknown option...
+	    /* FALLTHROUGH */
+	default:
+	    usage(argv[0]);
+	    exit (0);
 	}
+    }
 }
 
 /* Demonize wrapper */
 static void
 demonize(void)
 {
-	pid_t otherpid;
+    pid_t otherpid;
 
-	/* Try to create a pidfile */
-	pfh = pidfile_open(pidFile, 0600, &otherpid);
-	if (pfh == NULL) {
-		if (errno == EEXIST)
-			errx (EXIT_FAILURE, "Daemon already running, pid: %jd.", (intmax_t)otherpid);
+    /* Try to create a pidfile */
+    pfh = pidfile_open(pidFile, 0600, &otherpid);
+    if (pfh == NULL) {
+	if (errno == EEXIST)
+	    errx (EXIT_FAILURE, "Daemon already running, pid: %jd.", (intmax_t)otherpid);
 
-		/* If we cannot create pidfile from other reasons, only warn. */
-		warn ("Cannot open or create pidfile");
-		/*
-		* Even though pfh is NULL we can continue, as the other pidfile_*
-		* function can handle such situation by doing nothing except setting
-		* errno to EDOOFUS.
-		*/
-	}
+	/* If we cannot create pidfile from other reasons, only warn. */
+	warn ("Cannot open or create pidfile");
+	/*
+	* Even though pfh is NULL we can continue, as the other pidfile_*
+	* function can handle such situation by doing nothing except setting
+	* errno to EDOOFUS.
+	*/
+    }
 
-	/* Try to demonize the process */
-	if (daemon(0, 0) == -1) {
-		pidfile_remove(pfh);
-		errx (EXIT_FAILURE, "Cannot daemonize");
-	}
+    /* Try to demonize the process */
+    if (daemon(0, 0) == -1) {
+	pidfile_remove(pfh);
+	errx (EXIT_FAILURE, "Cannot daemonize");
+    }
 
-	pidfile_write(pfh);
+    pidfile_write(pfh);
 }
 
 static const char*
 wordexp_error(int err)
 {
-	switch (err) {
-	    case WRDE_BADCHAR:
-		return "One of the unquoted characters - <newline>, '|', '&', ';', '<', '>', '(', ')', '{', '}' - appears in an inappropriate context";
-	    case WRDE_BADVAL:
-		return "Reference to undefined shell variable when WRDE_UNDEF was set in flags to wordexp()";
-	    case WRDE_CMDSUB:
-		return "Command substitution requested when WRDE_NOCMD was set in flags to wordexp()";
-	    case WRDE_NOSPACE:
-		return "Attempt to allocate memory in wordexp() failed";
-	    case WRDE_SYNTAX:
-		return "Shell syntax error, such as unbalanced parentheses or unterminated string";
-	    default:
-		return "Unknown error from wordexp() function";
-	}
+    switch (err) {
+    case WRDE_BADCHAR:
+	return "One of the unquoted characters - <newline>, '|', '&', ';', '<', '>', '(', ')', '{', '}' - appears in an inappropriate context";
+    case WRDE_BADVAL:
+	return "Reference to undefined shell variable when WRDE_UNDEF was set in flags to wordexp()";
+    case WRDE_CMDSUB:
+	return "Command substitution requested when WRDE_NOCMD was set in flags to wordexp()";
+    case WRDE_NOSPACE:
+	return "Attempt to allocate memory in wordexp() failed";
+    case WRDE_SYNTAX:
+	return "Shell syntax error, such as unbalanced parentheses or unterminated string";
+    default:
+	return "Unknown error from wordexp() function";
+    }
 }
 
 static void
 exec_cmd(char *arg)
 {
-	int rc, status;
-	pid_t pid;
-	wordexp_t we;
+    int rc, status;
+    pid_t pid;
+    wordexp_t we;
 
-	if ((rc = wordexp(arg, &we, WRDE_NOCMD | WRDE_SHOWERR | WRDE_UNDEF)) == 0) {
-		status = posix_spawn(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
-		wordfree(&we);
-//	if (debug) {
-		if (status == 0) {
-			if (waitpid(pid, &status, 0) == -1)
-				perror("waitpid");
-	//		else
-	//			fprintf(stderr, "Child exited with status %i\n", status);
-		}
-		else
-			fprintf(stderr, "posix_spawn: %s\n", strerror(status));
-//	}
+    if ((rc = wordexp(arg, &we, WRDE_NOCMD | WRDE_SHOWERR | WRDE_UNDEF)) == 0) {
+	status = posix_spawn(&pid, we.we_wordv[0], NULL, NULL, we.we_wordv, environ);
+	wordfree(&we);
+	if (status == 0) {
+	    if (waitpid(pid, &status, 0) == -1)
+		perror("waitpid");
 	}
 	else
-		fprintf(stderr, "Failed to parse an action string [%s]\n%d: %s\n", arg, rc, wordexp_error(rc));
+	    fprintf(stderr, "posix_spawn: %s\n", strerror(status));
+    }
+    else
+	fprintf(stderr, "Failed to parse an action string [%s]\n%d: %s\n", arg, rc, wordexp_error(rc));
 }
 
 int
 main(int argc, char **argv)
 {
-	int rc;
-	sqlite3_stmt *res_update;
-	unsigned long illuminance, prevIlluminance = 0;
-	size_t len = sizeof(illuminance);
-	char *create_temp =
-	    "PRAGMA temp_store = MEMORY;\n"
-	    "PRAGMA journal_mode = OFF;\n"
-	    "CREATE TEMPORARY TABLE IF NOT EXISTS temp (\n"
-		"scopeid INT PRIMARY KEY NOT NULL,\n"
-		"level INT NOT NULL,\n"
-		"countdown INT NOT NULL DEFAULT 0\n"
-	    ") WITHOUT ROWID;\n";
+    int kq, ret;
+    struct kevent event;    /* Event monitored */
+    struct kevent tevent;   /* Event triggered */
 
-	char *update_temp =
-	    "INSERT INTO temp (scopeid, level, countdown) VALUES (?, ?, ?)\n"
-	    "ON CONFLICT (scopeid)\n"
-	    "DO UPDATE SET level=EXCLUDED.level, countdown=EXCLUDED.countdown;\n";
+    struct timespec timeout;
+    int waitms = 10000;
 
-	char *select_actions =
-	    "SELECT a1.level, a1.scopeid, a1.delay, a1.action, b.countdown, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
-	    "FROM illuminance a1\n"
-	    "LEFT JOIN temp b\n"
-	    "ON a1.scopeid = b.scopeid\n"
-	    "INNER JOIN (\n"
-		"SELECT MAX(level) AS max_level, scopeid\n"
-		"FROM illuminance WHERE level <= ? GROUP BY scopeid\n"
-	    ") a2\n"
-	    "ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;\n";
+    int rc;
+    sqlite3_stmt *res_update;
+    unsigned long illuminance, prevIlluminance = 0;
+    char buffer[ULONG_DECIMAL_LENGTH], *end;
+    char *create_temp =
+	"PRAGMA temp_store = MEMORY;\n"
+	"PRAGMA journal_mode = OFF;\n"
+	"CREATE TEMPORARY TABLE IF NOT EXISTS temp (\n"
+	    "scopeid INT PRIMARY KEY NOT NULL,\n"
+	    "level INT NOT NULL,\n"
+	    "countdown INT NOT NULL DEFAULT 0\n"
+	") WITHOUT ROWID;\n";
 
-	/* Analize params and set backgroundRun and pos */
-	get_param(argc, argv);
+    char *update_temp =
+	"INSERT INTO temp (scopeid, level, countdown) VALUES (?, ?, ?)\n"
+	"ON CONFLICT (scopeid)\n"
+	"DO UPDATE SET level=EXCLUDED.level, countdown=EXCLUDED.countdown;\n";
 
-	sprintf(mibSensor, "dev.bh1750.%u.illuminance", pos);
+    char *select_actions =
+	"SELECT a1.level, a1.scopeid, a1.delay, a1.action, b.countdown, CASE WHEN b.level IS NULL THEN -1 ELSE b.level END\n"
+	"FROM illuminance a1\n"
+	"LEFT JOIN temp b\n"
+	"ON a1.scopeid = b.scopeid\n"
+	"INNER JOIN (\n"
+	    "SELECT MAX(level) AS max_level, scopeid\n"
+	    "FROM illuminance WHERE level <= ? GROUP BY scopeid\n"
+	") a2\n"
+	"ON a1.level = a2.max_level AND a1.scopeid = a2.scopeid;\n";
 
-	/* If background flag run as a daemon */
-	if (backgroundRun)
-		demonize();
+    /* Analize params and set backgroundRun and pos */
+    get_param(argc, argv);
 
-	/* Intercept signals to our function */
-	if (signal (SIGINT, termination_handler) == SIG_IGN)
-		signal (SIGINT, SIG_IGN);
-	if (signal (SIGTERM, termination_handler) == SIG_IGN)
-		signal (SIGTERM, SIG_IGN);
+    /* Open RCRecv device */
+    dev = open(dev_bh1750, O_RDONLY);
+    if (dev < 0) {
+	perror("opening bh1750 device");
+	exit(EXIT_FAILURE);
+    }
 
-	rc = sqlite3_open(dbFile, &db);
+    /* Set a timeout by 'waitms' value */
+    timeout.tv_sec = waitms / 1000;
+    timeout.tv_nsec = (waitms % 1000) * 1000 * 1000;
 
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-		sqlite3_close(db);
-		exit (EXIT_FAILURE);
+    /* Create kqueue. */
+    kq = kqueue();
+    if (kq == -1)
+	err(EXIT_FAILURE, "kqueue() failed");
+
+    /* Initialize kevent structure. */
+    EV_SET(&event, dev, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+    /* Attach event to the kqueue. */
+    ret = kevent(kq, &event, 1, NULL, 0, NULL);
+    if (ret == -1)
+	err(EXIT_FAILURE, "kevent register");
+    if (event.flags & EV_ERROR)
+	errx(EXIT_FAILURE, "Event error: %s", strerror(event.data));
+
+    /* If there are dirty kevents read and drop irrelevant data */
+
+    ret = kevent(kq, NULL, 0, &tevent, 1, &timeout);
+    if (ret == -1)
+	err(EXIT_FAILURE, "kevent wait");
+    else if (ret > 0)
+	read(dev, &buffer, ULONG_DECIMAL_LENGTH);
+
+    /* If background flag run as a daemon */
+    if (backgroundRun) {
+	demonize();
+
+	/* Create kqueue for child */
+	kq = kqueue();
+	if (kq == -1)
+	    err(EXIT_FAILURE, "kqueue() failed");
+
+	/* Initialize kevent structure once more */
+	EV_SET(&event, dev, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+	/* and  once more attach event to the kqueue. */
+	ret = kevent(kq, &event, 1, NULL, 0, NULL);
+	if (ret == -1)
+	    err(EXIT_FAILURE, "kevent register");
+	if (event.flags & EV_ERROR)
+	    errx(EXIT_FAILURE, "Event error: %s", strerror(event.data));
+    }
+
+    /* Intercept signals to our function */
+    if (signal (SIGINT, termination_handler) == SIG_IGN)
+	signal (SIGINT, SIG_IGN);
+    if (signal (SIGTERM, termination_handler) == SIG_IGN)
+	signal (SIGTERM, SIG_IGN);
+
+    rc = sqlite3_open(dbFile, &db);
+
+    if (rc != SQLITE_OK) {
+	fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+	sqlite3_close(db);
+	exit (EXIT_FAILURE);
+    }
+
+    /* Create in memory temporary table */
+    do {
+	rc = sqlite3_exec(db, create_temp, 0, 0, NULL);
+    } while (rc == SQLITE_BUSY);
+
+    if (rc != SQLITE_OK ) {
+	fprintf(stderr, "Cannot create temporary table: %s\n", sqlite3_errmsg(db));
+	sqlite3_close(db);
+	exit (EXIT_FAILURE);
+    }
+
+    /* Prepare to select actions for reached values of light levels */
+    do {
+	rc = sqlite3_prepare_v2(db, select_actions, -1, &res_select, NULL);
+    } while (rc == SQLITE_BUSY);
+
+    if (rc != SQLITE_OK) {
+	fprintf(stderr, "Failed to fetch data: %s\n", sqlite3_errmsg(db));
+	sqlite3_close(db);
+	exit (EXIT_FAILURE);
+    }
+
+    /* Prepare to insert/update temporary values */
+    do {
+	rc = sqlite3_prepare_v2(db, update_temp, -1, &res_update, NULL);
+    } while (rc == SQLITE_BUSY);
+
+    if (rc != SQLITE_OK) {
+	fprintf(stderr,
+	    "Failed to prepare temporary table: %s\n",
+	    sqlite3_errmsg(db));
+	sqlite3_close(db);
+	exit (EXIT_FAILURE);
+    }
+
+    /* Main loop */
+    unsigned long colLevel, colLevelPrev, colScope, colDelay;
+    long colCountdown, maxLevel = ULONG_MAX;
+    char *colAction;
+    for(;;) {
+	/* Sleep until a code received */
+	ret = kevent(kq, NULL, 0, &tevent, 1, &timeout);
+	if (ret == -1) {
+	    err(EXIT_FAILURE, "kevent wait");
 	}
-
-	/* Create in memory temporary table */
-	do {
-		rc = sqlite3_exec(db, create_temp, 0, 0, NULL);
-	} while (rc == SQLITE_BUSY);
-
-	if (rc != SQLITE_OK ) {
-		fprintf(stderr, "Cannot create temporary table: %s\n", sqlite3_errmsg(db));
-		sqlite3_close(db);
-		exit (EXIT_FAILURE);
-	}
-
-	/* Prepare to select actions for reached values of light levels */
-	do {
-		rc = sqlite3_prepare_v2(db, select_actions, -1, &res_select, NULL);
-	} while (rc == SQLITE_BUSY);
-
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Failed to fetch data: %s\n", sqlite3_errmsg(db));
-		sqlite3_close(db);
-		exit (EXIT_FAILURE);
-	}
-
-	/* Prepare to insert/update temporary values */
-	do {
-		rc = sqlite3_prepare_v2(db, update_temp, -1, &res_update, NULL);
-	} while (rc == SQLITE_BUSY);
-
-	if (rc != SQLITE_OK) {
-		fprintf(stderr,
-			"Failed to prepare temporary table: %s\n",
-			sqlite3_errmsg(db));
-		sqlite3_close(db);
-		exit (EXIT_FAILURE);
-	}
-
-	/* Main loop */
-	unsigned long colLevel, colLevelPrev, colScope, colDelay;
-	long colCountdown, maxLevel = ULONG_MAX;
-	char *colAction;
-	while(true) {
-		/* Check if device is connected */
-		if (!found) {
-			/* If device was lost the name to mib resolution is needed again */
-			if ((sysctlnametomib(mibSensor, mib, &mibLen) == 0) &&
-			    (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == 0))
-			{
-				fprintf(stderr, "sysctl: Device %u is found.\n", pos);
-				found = true;
-			}
+	else if (ret > 0) {
+	    /* Check if device is connected */
+	    if (!found) {
+		/* If device was lost the name to mib resolution is needed again */
+		if (read(dev, &buffer, ULONG_DECIMAL_LENGTH) >= 0)
+		{
+		    fprintf(stderr, "read: Device '%s' is found.\n", dev_bh1750);
+		    found = true;
 		}
-		else
-			if (sysctl(mib, mibLen, &illuminance, &len, NULL, 0) == -1)
-			{
-				fprintf(stderr, "sysctl: Device %u is not found.\n", pos);
-				found = false;
+	    }
+	    else
+		if (read(dev, &buffer, ULONG_DECIMAL_LENGTH) < 0)
+		{
+		    fprintf(stderr, "read: Device '%s' is not found.\n", dev_bh1750);
+		    found = false;
+		}
+
+	    /* If devise is not found do nothing but sleep */
+	    if (found) {
+		illuminance = strtoul(buffer, &end, 10);
+		/* Nothing is expected between the previous reached and
+		   the previous measured (if DB is not changed).
+		 */
+		if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
+		{
+		    /* Get actual for the light level actions */
+		    maxLevel = -1;
+		    sqlite3_bind_int(res_select, 1, illuminance);
+		    while (sqlite3_step(res_select) == SQLITE_ROW) {
+			colLevel = sqlite3_column_int(res_select, 0);
+			colScope = sqlite3_column_int(res_select, 1);
+			colDelay = sqlite3_column_int(res_select, 2);
+			colCountdown = sqlite3_column_int(res_select, 4);
+			colLevelPrev = sqlite3_column_int(res_select, 5);
+			colAction = (char *)sqlite3_column_text(res_select, 3);
+
+			/* Calculate highest from reached levels */
+			if (maxLevel < colLevel)
+			    maxLevel = colLevel;
+
+			if (colLevel != colLevelPrev) {
+			    /* If reached level is other set delay for countdown */
+			    if (colDelay > 0)
+				colCountdown = colDelay;
+			    else {
+				/* Do action and mark it by -1 */
+				exec_cmd(colAction);
+				colCountdown = -1;
+			    }
+
+			    /* Anyway, set colCountdown to the delay value */
+			}
+			else {
+			    /* If reached level is same countdown the delay or do action */
+			    if (colCountdown > LOOP_TIMEOUT_SECONDS)
+				colCountdown -= LOOP_TIMEOUT_SECONDS;
+			    else {
+				/* If last turn do action and mark it by -1
+				    else do nothing */
+				if (colCountdown >= 0) {
+				    /* Do action and mark it by -1 */
+				    exec_cmd(colAction);
+				    colCountdown = -1;
+				}
+			    }
 			}
 
-		/* If devise is not found do nothing but sleep */
-		if (found) {
-			/* Nothing is expected between the previous reached and
-			   the previous measured (if DB is not changed).
-			 */
-			if ((illuminance < maxLevel) || (illuminance > prevIlluminance))
-			{
-				/* Get actual for the light level actions */
-				maxLevel = -1;
-				sqlite3_bind_int(res_select, 1, illuminance);
-				while (sqlite3_step(res_select) == SQLITE_ROW) {
-					colLevel = sqlite3_column_int(res_select, 0);
-					colScope = sqlite3_column_int(res_select, 1);
-					colDelay = sqlite3_column_int(res_select, 2);
-					colCountdown = sqlite3_column_int(res_select, 4);
-					colLevelPrev = sqlite3_column_int(res_select, 5);
-					colAction = (char *)sqlite3_column_text(res_select, 3);
+			/* Save the light levels to the temporary table */
+			sqlite3_bind_int(res_update, 1, colScope);
+			sqlite3_bind_int(res_update, 2, colLevel);
+			sqlite3_bind_int(res_update, 3, colCountdown);
 
-					/* Calculate highest from reached levels */
-					if (maxLevel < colLevel)
-						maxLevel = colLevel;
+			if (sqlite3_step(res_update) != SQLITE_DONE)
+			    fprintf(stderr,
+				    "Failed to update temporary table: %s\n",
+				    sqlite3_errmsg(db));
 
-					if (colLevel != colLevelPrev) {
-						/* If reached level is other set delay for countdown */
-						if (colDelay > 0)
-							colCountdown = colDelay;
-						else {
-							/* Do action and mark it by -1 */
-							exec_cmd(colAction);
-							colCountdown = -1;
-						}
+			sqlite3_reset(res_update);
 
-						/* Anyway, set colCountdown to the delay value */
-					}
-					else {
-						/* If reached level is same countdown the delay or do action */
-						if (colCountdown > LOOP_TIMEOUT_SECONDS)
-							colCountdown -= LOOP_TIMEOUT_SECONDS;
-						else {
-							/* If last turn do action and mark it by -1
-							    else do nothing */
-							if (colCountdown >= 0) {
-								/* Do action and mark it by -1 */
-								exec_cmd(colAction);
-								colCountdown = -1;
-							}
-						}
-					}
+		    } // while (sqlite3_step(res_select)
 
-					/* Save the light levels to the temporary table */
-					sqlite3_bind_int(res_update, 1, colScope);
-					sqlite3_bind_int(res_update, 2, colLevel);
-					sqlite3_bind_int(res_update, 3, colCountdown);
+		    /* Reset for next request */
+		    sqlite3_reset(res_select);
 
-					if (sqlite3_step(res_update) != SQLITE_DONE)
-						fprintf(stderr,
-							"Failed to update temporary table: %s\n",
-							sqlite3_errmsg(db));
+		} // if ((illuminance < maxLevel)...
 
-					sqlite3_reset(res_update);
+		/* Store the measured value for next round */
+		prevIlluminance = illuminance;
 
-				} // while (sqlite3_step(res_select)
-
-				/* Reset for next request */
-				sqlite3_reset(res_select);
-
-			} // if ((illuminance < maxLevel)...
-
-			/* Store the measured value for next round */
-			prevIlluminance = illuminance;
-
-		} // if (sysctl(mib...
-
-
-		sleep(LOOP_TIMEOUT_SECONDS);
-	}
-}
+	    } // if (found) ...
+	} // else if (ret > 0)...
+    } // for(;;)...
+} // int main(int argc, char **argv)
