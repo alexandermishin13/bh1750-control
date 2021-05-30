@@ -37,9 +37,9 @@ bh1750_daemon_dbfile="/var/db/bh1750/actions.sqlite"
 bh1750_daemon_pidfile="/var/db/bh1750-daemon.pid"
 ```
 ...or use a profile based configuration for multiple sensors. (See
-`rc.conf.d/bh1750_daemon` for example. You can copy it along with the folder
-to `/usr/local/etc/` instead of use `/etc/rc.conf` and change it for your
-needs).
+`rc.conf.d/bh1750_daemon.example`. You can copy it as `bh1750_daemon` to
+`/usr/local/etc/rc.conf.d/` instead of use `/etc/rc.conf` and change it for
+your needs).
 
 Now You can run the service[-s] by:
 ```
