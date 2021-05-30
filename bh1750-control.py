@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.7
+#!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
 
 import sys, subprocess
