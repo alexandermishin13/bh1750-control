@@ -1,0 +1,92 @@
+#!/bin/sh
+# This is a shell archive
+echo x misc/bh1750-control
+mkdir -p misc/bh1750-control > /dev/null 2>&1
+echo x misc/bh1750-control/Makefile
+sed 's/^X//' > misc/bh1750-control/Makefile << 'SHAR_END'
+X# $FreeBSD$
+X
+XPORTNAME=	bh1750-control
+XDISTVERSION=	g20210530
+XCATEGORIES=	misc
+XDIST_SUBDIR=	gpio/${GL_ACCOUNT}
+X
+XMAINTAINER=	mishin@mh.net.ru
+XCOMMENT=	FreeBSD daemon for a BH1750FVI based light sensor
+X
+XLICENSE=	BSD2CLAUSE
+XLICENSE_FILE=	${WRKSRC}/LICENSE
+X
+XONLY_FOR_ARCHS=	armv7
+XONLY_FOR_ARCHS_REASON=	not tested on anything else
+X
+XPYTHON_NO_DEPENDS=yes
+XUSES+=		sqlite python:3.7+
+X
+X# gitlab variables
+XUSE_GITLAB=	yes
+XGL_ACCOUNT=	alexandermishin13
+XGL_PROJECT=	bh1750-control
+XGL_COMMIT=	191025baebfabe5db38861460f2eebcf330e9b8f
+X
+XSUB_FILES=	pkg-message
+X
+XOPTIONS_DEFINE=	DOCS
+X
+Xpost-install:
+X	${MKDIR} ${STAGEDIR}/var/db/bh1750
+X	@${MKDIR} ${STAGEDIR}${PREFIX}/etc
+X	${INSTALL_DATA} ${WRKSRC}/rc.conf.d/bh1750_daemon ${STAGEDIR}${PREFIX}/etc/rc.conf.d/bh1750_daemon.sample
+X
+Xpost-install-DOCS-on:
+X	@${MKDIR} ${STAGEDIR}${DOCSDIR}
+X	${INSTALL_DATA} ${WRKSRC}/README.md ${STAGEDIR}${DOCSDIR}
+X	${INSTALL_DATA} ${WRKSRC}/examples/actions.sqlite.sql.example ${STAGEDIR}${DOCSDIR}
+X
+X.include <bsd.port.mk>
+SHAR_END
+echo x misc/bh1750-control/distinfo
+sed 's/^X//' > misc/bh1750-control/distinfo << 'SHAR_END'
+XTIMESTAMP = 1622376246
+XSHA256 (gpio/alexandermishin13/alexandermishin13-bh1750-control-191025baebfabe5db38861460f2eebcf330e9b8f_GL0.tar.gz) = 9b1da9ec3ff81048cc1640bfd2fe37a3c7662d66f6b7908369e395b97f71b69c
+XSIZE (gpio/alexandermishin13/alexandermishin13-bh1750-control-191025baebfabe5db38861460f2eebcf330e9b8f_GL0.tar.gz) = 12359
+SHAR_END
+echo x misc/bh1750-control/pkg-plist
+sed 's/^X//' > misc/bh1750-control/pkg-plist << 'SHAR_END'
+Xsbin/bh1750-daemon
+Xbin/bh1750-control
+Xman/man1/bh1750-control.1.gz
+Xman/man8/bh1750-daemon.8.gz
+X@dir /var/db/bh1750
+X@dir etc/rc.conf.d
+X@sample etc/rc.conf.d/bh1750_daemon.sample
+X%%PORTDOCS%%%%DOCSDIR%%/README.md
+X%%PORTDOCS%%%%DOCSDIR%%/actions.sqlite.sql.example
+SHAR_END
+echo x misc/bh1750-control/files
+mkdir -p misc/bh1750-control/files > /dev/null 2>&1
+echo x misc/bh1750-control/pkg-descr
+sed 's/^X//' > misc/bh1750-control/pkg-descr << 'SHAR_END'
+X"bh1750-daemon" and "bh1750-control" can be used for commands to run on the
+Xdefined lights levels are reached.
+X
+X"bh1750-control" can be used also to manage a sqlite3 DB for the lights
+Xlevels and commands to run when a defined one is reached.
+XBoth "bh1750-daemon" and "bh1750-control" can read a illuminance value
+Xfrom /dev/bh1750/<n> character device and run a command for it.
+X
+XWWW: https://gitlab.com/alexandermishin13/bh1750-control
+SHAR_END
+echo x misc/bh1750-control/files/pkg-message.in
+sed 's/^X//' > misc/bh1750-control/files/pkg-message.in << 'SHAR_END'
+X[
+X{ type: install
+X  message: <<EOM
+X
+XSample of a service config is installed in %%PREFIX%%/etc/rc.conf.d/.
+XREADME.md and sample of an sqlite3 file a installed in %%DOCSDIR%%.
+XEOM
+X}
+X]
+SHAR_END
+exit
