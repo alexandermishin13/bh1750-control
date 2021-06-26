@@ -115,7 +115,7 @@ get_param(int argc, char **argv)
 	case 'f': // db filename
 	    dbFile = optarg;
 	    break;
-	    case 'p': // pid filename
+	case 'p': // pid filename
 	    pidFile = optarg;
 	    break;
 	case 'h': // help request
